@@ -21,10 +21,10 @@ include = [
 ]
 
 [dependencies]
-gstreamer = { version = "0.24", features = ["v1_16"] }
-gstreamer-base = { version = "0.24", features = ["v1_16"] }
-gstreamer-audio = { version = "0.24", features = ["v1_16"] }
-glib = "0.21"
+gstreamer = { version = "0.25", features = ["v1_16"] }
+gstreamer-base = { version = "0.25", features = ["v1_16"] }
+gstreamer-audio = { version = "0.25", features = ["v1_16"] }
+glib = "0.22"
 futures = "0.3"
 num_cpus = "1"
 walkdir = "2"
