@@ -33,5 +33,6 @@ There are no tests.
 
 - Conventional commit prefixes (`chore:`, `docs:`, `build:` …). Dependency upgrades are committed as `chore: update deps`.
 - Releases: `chore: bump version (vX.Y.Z)` bumps the version in `Cargo.toml`/`Cargo.lock` and adds a `CHANGELOG.md` entry; the commit is tagged `vX.Y.Z`.
+- `use` statements for external crates (including `std`) start with `::` (e.g. `use ::anyhow::Result;`); `crate::`/`super::` paths stay as they are. rustfmt has no option for this, so keep it by hand.
 - Use glib via `gstreamer::glib` instead of adding `glib` as a direct dependency, so its version can't drift from the one gstreamer uses.
 - GStreamer enum properties (e.g. opusenc `bitrate-type`, lamemp3enc `target`, flacenc `quality`) must be set with `set_property_from_str`. Passing a string through `gmake`/`property()` compiles but panics at runtime when the pipeline is built.

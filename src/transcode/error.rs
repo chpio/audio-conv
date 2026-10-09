@@ -1,6 +1,6 @@
-use anyhow::Error;
-use gstreamer::glib::{self, Boxed};
-use std::{error::Error as StdError, fmt, result::Result as StdResult, sync::Arc};
+use ::anyhow::Error;
+use ::gstreamer::glib::{self, Boxed};
+use ::std::{error::Error as StdError, fmt, result::Result as StdResult, sync::Arc};
 
 #[derive(Clone, Debug, Boxed)]
 #[boxed_type(name = "GBoxErrorWrapper")]

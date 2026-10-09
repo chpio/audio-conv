@@ -3,12 +3,12 @@ use crate::{
 	config::{self, Transcode},
 	ui,
 };
-use anyhow::{Context, Error, Result};
-use futures::{pin_mut, prelude::*};
-use gstreamer::{Element, element_error, prelude::*};
-use gstreamer_base::prelude::*;
-use std::{path::Path, time::Duration};
-use tokio::time::interval;
+use ::anyhow::{Context, Error, Result};
+use ::futures::{pin_mut, prelude::*};
+use ::gstreamer::{Element, element_error, prelude::*};
+use ::gstreamer_base::prelude::*;
+use ::std::{path::Path, time::Duration};
+use ::tokio::time::interval;
 
 fn gmake<T: IsA<Element>>(factory_name: &str, properties: &[(&str, &dyn ToValue)]) -> Result<T> {
 	let builder = gstreamer::ElementFactory::make(factory_name);
@@ -212,7 +212,7 @@ pub async fn transcode_gstreamer(
 	let stream_processor = async {
 		bus.stream()
 			.map::<Result<bool>, _>(|msg| {
-				use gstreamer::MessageView;
+				use ::gstreamer::MessageView;
 
 				match msg.view() {
 					MessageView::Eos(..) => {
@@ -278,7 +278,7 @@ pub async fn transcode_gstreamer(
 
 	let mut progress_interval = interval(Duration::from_millis(ui::UPDATE_INTERVAL_MILLIS / 2));
 	let progress_processor = async {
-		use gstreamer::ClockTime;
+		use ::gstreamer::ClockTime;
 
 		loop {
 			progress_interval.tick().await;

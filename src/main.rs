@@ -4,10 +4,10 @@ mod tag;
 mod transcode;
 mod ui;
 
-use anyhow::{Context, Result};
-use futures::prelude::*;
-use std::{fmt::Write as FmtWrite, path::Path};
-use tokio::{fs, io::AsyncWriteExt, task};
+use ::anyhow::{Context, Result};
+use ::futures::prelude::*;
+use ::std::{fmt::Write as FmtWrite, path::Path};
+use ::tokio::{fs, io::AsyncWriteExt, task};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {

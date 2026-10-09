@@ -1,15 +1,15 @@
 use crate::scan::ConversionArgs;
-use anyhow::{Context, Result};
-use futures::Future;
-use ratatui::{
+use ::anyhow::{Context, Result};
+use ::futures::Future;
+use ::ratatui::{
 	Terminal,
 	backend::{Backend, CrosstermBackend},
 };
-use std::{
+use ::std::{
 	borrow::Cow, cell::RefCell, collections::HashMap, io, mem, path::PathBuf, rc::Rc,
 	time::Duration,
 };
-use tokio::{task, time::interval};
+use ::tokio::{task, time::interval};
 
 pub const UPDATE_INTERVAL_MILLIS: u64 = 100;
 
@@ -114,7 +114,7 @@ impl State {
 	}
 
 	fn render(&mut self) -> Result<()> {
-		use ratatui::{
+		use ::ratatui::{
 			layout::{Constraint, Direction, Layout, Rect},
 			style::{Color, Modifier, Style},
 			text::Text,

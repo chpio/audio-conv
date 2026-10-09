@@ -1,9 +1,9 @@
-use anyhow::{Context, Error, Result};
-use clap::{ArgAction, builder::ValueParser};
-use globset::GlobBuilder;
-use regex::bytes::{Regex, RegexBuilder};
-use serde::Deserialize;
-use std::{
+use ::anyhow::{Context, Error, Result};
+use ::clap::{ArgAction, builder::ValueParser};
+use ::globset::GlobBuilder;
+use ::regex::bytes::{Regex, RegexBuilder};
+use ::serde::Deserialize;
+use ::std::{
 	io::Write,
 	path::{Path, PathBuf},
 };
@@ -120,7 +120,7 @@ struct TranscodeMatchFile {
 }
 
 pub fn config() -> Result<Config> {
-	use clap::{Arg, Command};
+	use ::clap::{Arg, Command};
 
 	let arg_matches = Command::new("audio-conv")
 		.version(clap::crate_version!())

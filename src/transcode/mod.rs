@@ -6,9 +6,9 @@ use crate::{
 	scan::ConversionArgs,
 	ui,
 };
-use anyhow::{Context, Result};
-use std::path::Path;
-use tokio::fs;
+use ::anyhow::{Context, Result};
+use ::std::path::Path;
+use ::tokio::fs;
 
 pub async fn transcode(
 	config: &Config,
