@@ -317,6 +317,6 @@ fn load_config_file(path: &Path) -> Result<Option<ConfigFile>> {
 		Err(err) => return Err(Error::new(err)),
 	};
 	let config: ConfigFile =
-		serde_yaml::from_reader(&mut file).context("Could not parse config file")?;
+		serde_yaml_ng::from_reader(&mut file).context("Could not parse config file")?;
 	Ok(Some(config))
 }
