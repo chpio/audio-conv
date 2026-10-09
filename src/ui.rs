@@ -1,12 +1,15 @@
 use crate::ConversionArgs;
 use anyhow::{Context, Result};
 use futures::Future;
+use ratatui::{
+	Terminal,
+	backend::{Backend, CrosstermBackend},
+};
 use std::{
 	borrow::Cow, cell::RefCell, collections::HashMap, io, mem, path::PathBuf, rc::Rc,
 	time::Duration,
 };
 use tokio::{task, time::interval};
-use tui::{Terminal, backend::CrosstermBackend};
 
 pub const UPDATE_INTERVAL_MILLIS: u64 = 100;
 
@@ -112,7 +115,7 @@ impl State {
 	}
 
 	fn render(&mut self) -> Result<()> {
-		use tui::{
+		use ratatui::{
 			layout::{Constraint, Direction, Layout, Rect},
 			style::{Color, Modifier, Style},
 			text::Text,
@@ -136,7 +139,11 @@ impl State {
 		running_tasks.sort_by_key(|task| task.id);
 
 		if !self.has_rendered {
-			self.terminal.clear().context("Clearing ui failed")?;
+			// `Terminal::clear` would query the cursor position, which needs a responding terminal
+			self.terminal
+				.backend_mut()
+				.clear()
+				.context("Clearing ui failed")?;
 			self.has_rendered = true;
 		}
 
@@ -161,7 +168,7 @@ impl State {
 					.direction(Direction::Vertical)
 					.margin(1)
 					.constraints([Constraint::Percentage(90), Constraint::Percentage(10)].as_ref())
-					.split(f.size());
+					.split(f.area());
 
 				let mut task_rect = chunks[0];
 

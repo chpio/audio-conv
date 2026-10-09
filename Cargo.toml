@@ -36,7 +36,7 @@ serde_yaml = "0.9"
 regex = "1"
 globset = "0.4"
 derive_more = { version = "2", features = ["full"] }
-tui = { version = "0.19", default-features = false, features = ["crossterm"] }
+ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
 
 [dependencies.tokio]
 version = "1"
