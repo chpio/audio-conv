@@ -5,11 +5,13 @@ mod ui;
 use crate::config::{Config, Transcode};
 use anyhow::{Context, Error, Result};
 use futures::{pin_mut, prelude::*};
-use glib::Boxed;
-use gstreamer::{Element, element_error, prelude::*};
+use gstreamer::{
+	Element, element_error,
+	glib::{self, Boxed},
+	prelude::*,
+};
 use gstreamer_base::prelude::*;
 use std::{
-	borrow::Cow,
 	error::Error as StdError,
 	fmt,
 	fmt::Write as FmtWrite,
@@ -53,11 +55,9 @@ struct GErrorMessage {
 
 fn gmake<T: IsA<Element>>(factory_name: &str, properties: &[(&str, &dyn ToValue)]) -> Result<T> {
 	let builder = gstreamer::ElementFactory::make(factory_name);
-	let builder = properties
-		.into_iter()
-		.fold(builder, |builder, (name, value)| {
-			builder.property(name, value.to_value())
-		});
+	let builder = properties.iter().fold(builder, |builder, (name, value)| {
+		builder.property(name, value.to_value())
+	});
 	let res = builder
 		.build()
 		.with_context(|| format!("Could not make gstreamer Element \"{}\"", factory_name))?
@@ -85,16 +85,12 @@ fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<Conversio
 		.filter_map(|e| e.ok())
 		.filter(|e| e.file_type().is_file())
 		.map(move |e| -> Result<Option<ConversionArgs>> {
-			let from_bytes = path_to_bytes(e.path());
+			let from_bytes = e.path().as_os_str().as_encoded_bytes();
 
 			let transcode = config
 				.matches
 				.iter()
-				.filter(|m| {
-					m.regexes
-						.iter()
-						.any(|regex| regex.is_match(from_bytes.as_ref()))
-				})
+				.filter(|m| m.regexes.iter().any(|regex| regex.is_match(from_bytes)))
 				.map(|m| m.to.clone())
 				.next();
 			let transcode = if let Some(transcode) = transcode {
@@ -111,7 +107,7 @@ fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<Conversio
 				)
 			})?;
 
-			let mut to = config.to.join(&rel_path);
+			let mut to = config.to.join(rel_path);
 			to.set_extension(transcode.extension());
 
 			let is_newer = {
@@ -156,18 +152,18 @@ async fn main() -> Result<()> {
 			let (ui_queue, ui_fut) = ui::init();
 
 			let main_handle = async move {
-				let ok = task::spawn_local(main_loop(ui_queue))
+				task::spawn_local(main_loop(ui_queue))
 					.await
 					.context("Main task failed")??;
-				Result::<_>::Ok(ok)
+				Result::<_>::Ok(())
 			};
 
 			let ui_handle = async move {
-				let ok = task::spawn_local(ui_fut)
+				task::spawn_local(ui_fut)
 					.await
 					.context("Ui task failed")?
 					.context("Ui failed")?;
-				Result::<_>::Ok(ok)
+				Result::<_>::Ok(())
 			};
 
 			future::try_join(main_handle, ui_handle).await?;
@@ -203,7 +199,12 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
 		log_path: log_path.clone(),
 	});
 
-	let concurrent_jobs = config.jobs.unwrap_or_else(|| num_cpus::get());
+	let concurrent_jobs = match config.jobs {
+		Some(jobs) => jobs,
+		None => std::thread::available_parallelism()
+			.context("Could not get the number of logical cores, use \"jobs\" to set it")?
+			.get(),
+	};
 
 	stream::iter(conv_args.into_iter().enumerate())
 		.map(Ok)
@@ -240,7 +241,7 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
 						};
 
 						let mut err_str = String::new();
-						if let Err(write_err) = write!(&mut err_str, "{:?}\n", err) {
+						if let Err(write_err) = writeln!(&mut err_str, "{:?}", err) {
 							let err = err.context(format!(
 								"Unable to format transcoding error for logging (write error: {})",
 								write_err
@@ -478,7 +479,7 @@ async fn transcode_gstreamer(
 			}
 
 			let sink_pad = dest_elems
-				.get(0)
+				.first()
 				.unwrap()
 				.static_pad("sink")
 				.expect("1. dest element has no sinkpad");
@@ -489,7 +490,7 @@ async fn transcode_gstreamer(
 
 		if let Err(err) = insert_sink() {
 			let details = gstreamer::Structure::builder("error-details")
-				.field("error", &GBoxErrorWrapper::new(err))
+				.field("error", GBoxErrorWrapper::new(err))
 				.build();
 
 			element_error!(
@@ -513,9 +514,6 @@ async fn transcode_gstreamer(
 				use gstreamer::MessageView;
 
 				match msg.view() {
-					// MessageView::Progress() => {
-
-					// }
 					MessageView::Eos(..) => {
 						// we need to actively stop pulling the stream, that's because stream will
 						// never end despite yielding an `Eos` message
@@ -640,28 +638,5 @@ where
 			}
 		},
 		res @ Ok(..) => res,
-	}
-}
-
-fn path_to_bytes(path: &Path) -> Cow<'_, [u8]> {
-	// https://stackoverflow.com/a/59224987/5572146
-	#[cfg(unix)]
-	{
-		use std::os::unix::ffi::OsStrExt;
-		Cow::Borrowed(path.as_os_str().as_bytes())
-	}
-
-	#[cfg(windows)]
-	{
-		// NOT TESTED
-		// FIXME: test and post answer to https://stackoverflow.com/questions/38948669
-		use std::os::windows::ffi::OsStrExt;
-		let buf: Vec<u8> = path
-			.as_os_str()
-			.encode_wide()
-			.map(|char| char.to_ne_bytes())
-			.flatten()
-			.collect();
-		Cow::Owned(buf)
 	}
 }

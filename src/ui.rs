@@ -102,7 +102,6 @@ impl State {
 				task.ratio = Some(ratio);
 			}
 			Msg::TaskError { id } => {
-				// TODO
 				self.running_tasks
 					.remove(&id)
 					.context("Unable to remove errored task; could't find task")?;

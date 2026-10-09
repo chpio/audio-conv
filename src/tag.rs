@@ -1,6 +1,6 @@
-use glib::{GStr, Value, gstr};
 use gstreamer::{
 	Tag, TagFlag,
+	glib::{GStr, Value, gstr},
 	tags::{CustomTag, merge_strings_with_comma},
 };
 

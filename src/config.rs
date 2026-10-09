@@ -229,8 +229,8 @@ pub fn config() -> Result<Config> {
 
 					let extensions = m.extensions.iter().map(|ext| {
 						let mut ext = regex::escape(ext);
-						ext.insert_str(0, &"\\.");
-						ext.push_str("$");
+						ext.insert_str(0, "\\.");
+						ext.push('$');
 
 						let regex = RegexBuilder::new(&ext)
 							.case_insensitive(true)
@@ -272,8 +272,7 @@ pub fn config() -> Result<Config> {
 				.or_else(|| {
 					config_file
 						.as_ref()
-						.map(|c| c.from.as_ref())
-						.flatten()
+						.and_then(|c| c.from.as_ref())
 						.map(|p| config_dir.join(p))
 				})
 				.ok_or_else(|| Error::msg("\"from\" not configured"))?
@@ -286,8 +285,7 @@ pub fn config() -> Result<Config> {
 			.or_else(|| {
 				config_file
 					.as_ref()
-					.map(|c| c.to.as_ref())
-					.flatten()
+					.and_then(|c| c.to.as_ref())
 					.map(|p| config_dir.join(p))
 			})
 			.ok_or_else(|| Error::msg("\"to\" not configured"))?
@@ -297,16 +295,7 @@ pub fn config() -> Result<Config> {
 		jobs: arg_matches
 			.get_one("jobs")
 			.copied()
-			.or_else(|| config_file.as_ref().map(|c| c.jobs).flatten()),
-		// .map(|jobs_str| {
-		// 	jobs_str.parse().with_context(|| {
-		// 		format!(
-		// 			"Could not parse \"jobs\" argument \"{}\" to a number",
-		// 			&jobs_str
-		// 		)
-		// 	})
-		// })
-		// .transpose()?,
+			.or_else(|| config_file.as_ref().and_then(|c| c.jobs)),
 	})
 }
 

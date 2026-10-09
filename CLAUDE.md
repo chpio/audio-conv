@@ -33,4 +33,5 @@ There are no tests.
 
 - Conventional commit prefixes (`chore:`, `docs:`, `build:` …). Dependency upgrades are committed as `chore: update deps`.
 - Releases: `chore: bump version (vX.Y.Z)` bumps the version in `Cargo.toml`/`Cargo.lock` and adds a `CHANGELOG.md` entry; the commit is tagged `vX.Y.Z`.
-- `glib` must stay on the version matching the `gstreamer*` crates (e.g. gstreamer 0.25 ↔ glib 0.22), otherwise two glib versions end up in the dependency tree.
+- Use glib via `gstreamer::glib` instead of adding `glib` as a direct dependency, so its version can't drift from the one gstreamer uses.
+- GStreamer enum properties (e.g. opusenc `bitrate-type`, lamemp3enc `target`, flacenc `quality`) must be set with `set_property_from_str`. Passing a string through `gmake`/`property()` compiles but panics at runtime when the pipeline is built.
