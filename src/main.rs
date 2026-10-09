@@ -401,30 +401,37 @@ async fn transcode_gstreamer(
 				} => {
 					let encoder: Element = gmake(
 						"opusenc",
-						&[
-							(
-								"bitrate",
-								&i32::from(*bitrate)
-									.checked_mul(1_000)
-									.context("Bitrate overflowed")?,
-							),
-							(
-								"bitrate-type",
-								match bitrate_type {
-									config::BitrateType::Vbr => &"1",
-									config::BitrateType::Cbr => &"0",
-								},
-							),
-						],
+						&[(
+							"bitrate",
+							&i32::from(*bitrate)
+								.checked_mul(1_000)
+								.context("Bitrate overflowed")?,
+						)],
 					)?;
+					// enum properties can't be set from a plain string value, they need to be
+					// parsed from their nick
+					encoder.set_property_from_str(
+						"bitrate-type",
+						match bitrate_type {
+							config::BitrateType::Vbr => "vbr",
+							config::BitrateType::Cbr => "cbr",
+						},
+					);
 
 					dest_elems.push(encoder);
 					dest_elems.push(gmake("oggmux", &[])?);
 				}
 
 				Transcode::Flac { compression } => {
-					let encoder: Element =
-						gmake("flacenc", &[("quality", &compression.to_string())])?;
+					if *compression > 9 {
+						return Err(Error::msg(format!(
+							"Invalid flac compression {}, must be between 0 and 9",
+							compression
+						)));
+					}
+
+					let encoder: Element = gmake("flacenc", &[])?;
+					encoder.set_property_from_str("quality", &compression.to_string());
 					dest_elems.push(encoder);
 				}
 
@@ -435,8 +442,6 @@ async fn transcode_gstreamer(
 					let encoder: Element = gmake(
 						"lamemp3enc",
 						&[
-							// target: "1" = "bitrate"
-							("target", &"1"),
 							("bitrate", &i32::from(*bitrate)),
 							(
 								"cbr",
@@ -447,6 +452,7 @@ async fn transcode_gstreamer(
 							),
 						],
 					)?;
+					encoder.set_property_from_str("target", "bitrate");
 
 					dest_elems.push(encoder);
 					dest_elems.push(gmake("id3v2mux", &[])?);
