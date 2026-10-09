@@ -1,4 +1,4 @@
-use crate::ConversionArgs;
+use crate::scan::ConversionArgs;
 use anyhow::{Context, Result};
 use futures::Future;
 use ratatui::{
