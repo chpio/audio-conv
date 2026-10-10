@@ -37,7 +37,12 @@ pub struct Delete {
 	pub mode: DeleteMode,
 	/// Without it, the files are only logged.
 	pub force: bool,
+	/// With `force`, nothing is deleted if it would be more than this share of the files in `to`.
+	pub max_percent: u8,
 }
+
+/// Default of `--max-delete`.
+pub const DEFAULT_MAX_DELETE_PERCENT: u8 = 10;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeleteMode {

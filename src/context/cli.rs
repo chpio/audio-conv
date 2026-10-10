@@ -1,4 +1,4 @@
-use super::{Delete, DeleteMode};
+use super::{DEFAULT_MAX_DELETE_PERCENT, Delete, DeleteMode};
 use ::clap::{Arg, ArgAction, builder::ValueParser};
 use ::std::path::PathBuf;
 
@@ -85,7 +85,24 @@ pub fn parse() -> Args {
 				.long("force")
 				.action(ArgAction::SetTrue)
 				.requires("delete")
-				.help("Deletes the files found by --delete instead of only logging them"),
+				.help(
+					"Deletes the files found by --delete instead of only logging them, run without \
+					 it first to check them",
+				),
+		)
+		.arg(
+			Arg::new("max-delete")
+				.long("max-delete")
+				.required(false)
+				.value_parser(clap::value_parser!(u8).range(0..=100))
+				.action(ArgAction::Set)
+				.requires("delete")
+				.value_name("PERCENT")
+				.help(format!(
+					"With --force, nothing is deleted if it would be more than this share of the \
+					 files in \"to\", e.g. because a part of \"from\" isn't mounted [default: {}]",
+					DEFAULT_MAX_DELETE_PERCENT
+				)),
 		)
 		.subcommand(
 			::clap::Command::new("init")
@@ -104,6 +121,10 @@ pub fn parse() -> Args {
 				_ => DeleteMode::Converted,
 			},
 			force: arg_matches.get_flag("force"),
+			max_percent: arg_matches
+				.get_one::<u8>("max-delete")
+				.copied()
+				.unwrap_or(DEFAULT_MAX_DELETE_PERCENT),
 		}),
 		command: match arg_matches.subcommand_name() {
 			Some("init") => Some(Command::Init),

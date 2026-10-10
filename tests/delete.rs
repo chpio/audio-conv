@@ -12,6 +12,7 @@ use common::{Dirs, compile, dirs, touch};
 fn orphans(ctx: &Context, mode: DeleteMode) -> Vec<PathBuf> {
 	find_orphans(ctx, &walk(ctx).unwrap(), mode)
 		.unwrap()
+		.paths
 		.into_iter()
 		.map(|path| path.strip_prefix(&ctx.to).unwrap().to_path_buf())
 		.collect()
@@ -80,8 +81,17 @@ fn keeps_config_and_log_file() {
 
 	let orphans = find_orphans(&d.ctx, &walk(&d.ctx).unwrap(), DeleteMode::All).unwrap();
 
-	assert!(!orphans.contains(&d.ctx.config_path));
-	assert!(!orphans.contains(&d.ctx.log.path().to_path_buf()));
+	assert!(!orphans.paths.contains(&d.ctx.config_path));
+	assert!(!orphans.paths.contains(&d.ctx.log.path().to_path_buf()));
+}
+
+#[test]
+fn counts_all_files_in_to() {
+	let d = library(compile_matches(&[]).unwrap());
+
+	let orphans = find_orphans(&d.ctx, &walk(&d.ctx).unwrap(), DeleteMode::Converted).unwrap();
+
+	assert_eq!((orphans.paths.len(), orphans.total), (2, 5));
 }
 
 #[test]
@@ -120,8 +130,56 @@ fn fails_if_from_is_not_fully_readable() {
 	}
 }
 
+/// Without a `--max-delete` limit, `library` has 2 of 5 files to delete with `Converted`.
 fn delete(mode: DeleteMode, force: bool) -> Option<Delete> {
-	Some(Delete { mode, force })
+	Some(Delete {
+		mode,
+		force,
+		max_percent: 100,
+	})
+}
+
+fn delete_max(max_percent: u8, force: bool) -> Option<Delete> {
+	Some(Delete {
+		mode: DeleteMode::Converted,
+		force,
+		max_percent,
+	})
+}
+
+#[test]
+fn run_with_force_deletes_nothing_above_max_delete() {
+	let mut d = library(compile_matches(&[]).unwrap());
+	d.ctx.delete = delete_max(39, true);
+	let ctx = d.ctx;
+
+	assert!(run(&ctx, &walk(&ctx).unwrap()).is_err());
+	assert!(ctx.to.join("album/b.opus").exists());
+	assert!(ctx.to.join("album/c.tmp").exists());
+}
+
+#[test]
+fn run_with_force_deletes_up_to_max_delete() {
+	let mut d = library(compile_matches(&[]).unwrap());
+	// exactly 2 of 5
+	d.ctx.delete = delete_max(40, true);
+	let ctx = d.ctx;
+
+	let deleted = run(&ctx, &walk(&ctx).unwrap()).unwrap().unwrap();
+
+	assert_eq!(deleted.files, 2);
+	assert!(!ctx.to.join("album/b.opus").exists());
+}
+
+#[test]
+fn run_without_force_ignores_max_delete() {
+	let mut d = library(compile_matches(&[]).unwrap());
+	d.ctx.delete = delete_max(0, false);
+	let ctx = d.ctx;
+
+	let deleted = run(&ctx, &walk(&ctx).unwrap()).unwrap().unwrap();
+
+	assert_eq!(deleted.files, 2);
 }
 
 #[test]

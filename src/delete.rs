@@ -28,7 +28,23 @@ pub fn run(ctx: &Context, scan: &Scan) -> Result<Option<Deleted>> {
 		return Ok(None);
 	};
 
-	let orphans = find_orphans(ctx, scan, delete.mode)?;
+	let Orphans {
+		paths: orphans,
+		total,
+	} = find_orphans(ctx, scan, delete.mode)?;
+
+	// guards against a part of `from` that is missing without a read error, e.g. an empty mount
+	// point, its files in `to` would look like orphans
+	if delete.force && orphans.len() * 100 > total * usize::from(delete.max_percent) {
+		return Err(Error::msg(format!(
+			"Would delete {} of the {} files in {}, more than --max-delete={}%. Check them by running \
+			 --delete without --force and raise --max-delete if that's intended",
+			orphans.len(),
+			total,
+			ctx.to.display(),
+			delete.max_percent
+		)));
+	}
 
 	let mut failed = 0;
 
@@ -64,13 +80,19 @@ pub fn run(ctx: &Context, scan: &Scan) -> Result<Option<Deleted>> {
 	}))
 }
 
-/// Files in `to` that don't belong to a matching file in `from`, sorted. The config and log file
-/// are never returned.
-///
+#[derive(Debug)]
+pub struct Orphans {
+	/// Files in `to` that don't belong to a matching file in `from`, sorted. The config and log
+	/// file are never included.
+	pub paths: Vec<PathBuf>,
+	/// All files in `to`.
+	pub total: usize,
+}
+
 /// Fails instead of returning a possibly too long list: if `scan` couldn't read all of `from`,
 /// if reading `to` fails, if no file in `from` matches (e.g. an unmounted drive) and if `from`
 /// and `to` overlap.
-pub fn find_orphans(ctx: &Context, scan: &Scan, mode: DeleteMode) -> Result<Vec<PathBuf>> {
+pub fn find_orphans(ctx: &Context, scan: &Scan, mode: DeleteMode) -> Result<Orphans> {
 	if ctx.to.starts_with(&ctx.from) || ctx.from.starts_with(&ctx.to) {
 		return Err(Error::msg(format!(
 			"\"from\" ({}) and \"to\" ({}) overlap",
@@ -116,10 +138,15 @@ pub fn find_orphans(ctx: &Context, scan: &Scan, mode: DeleteMode) -> Result<Vec<
 		.collect();
 
 	let mut orphans = Vec::new();
+	let mut total = 0;
 	for entry in walkdir::WalkDir::new(&ctx.to) {
 		let entry = entry.context("Failed reading the \"to\" directory")?;
 		let path = entry.path();
-		if entry.file_type().is_dir() || targets.contains(path) || keep.contains(path) {
+		if entry.file_type().is_dir() {
+			continue;
+		}
+		total += 1;
+		if targets.contains(path) || keep.contains(path) {
 			continue;
 		}
 
@@ -145,7 +172,10 @@ pub fn find_orphans(ctx: &Context, scan: &Scan, mode: DeleteMode) -> Result<Vec<
 	}
 
 	orphans.sort();
-	Ok(orphans)
+	Ok(Orphans {
+		paths: orphans,
+		total,
+	})
 }
 
 /// Deletes `path` and the directories it leaves empty, up to `to`.

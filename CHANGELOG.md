@@ -3,6 +3,8 @@
 ## Unreleased
 
 * log the directories in "from" that can't be read instead of skipping them silently
+* add `--max-delete`, `--force` deletes nothing if that would be more than 10 % of the files in
+  "to" by default
 
 ## 1.5.0
 
