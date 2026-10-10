@@ -18,7 +18,7 @@ cargo run -- -f <from> -t <to> [-j N] [-c config.yaml]
 cargo outdated -R          # find outdated direct deps (cargo info/search don't work: crates-io is mirrored via kellnr)
 ```
 
-Tests live in `tests/` (integration tests against the library, no inline `#[cfg(test)]` modules) and cover config/match compilation and the directory scan; transcoding and the UI are untested.
+Tests live in `tests/` (integration tests against the library, no inline `#[cfg(test)]` modules) and cover config/match compilation, the directory scan and the encoder/muxer elements per codec (`tests/gstreamer.rs`, needs the GStreamer plugins of all codecs installed); the full transcode of files and the UI are untested.
 
 ## Architecture
 
