@@ -3,6 +3,7 @@
 ## Unreleased
 
 * fix the commented `regex` example in the config written by `init`, it was invalid YAML
+* improve the `--help` texts
 
 ## v1.4.0
 

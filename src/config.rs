@@ -231,7 +231,7 @@ pub fn config() -> Result<Config> {
 
 	let arg_matches = Command::new("audio-conv")
 		.version(clap::crate_version!())
-		.about("Converts audio files")
+		.about(clap::crate_description!())
 		.arg(
 			Arg::new("config")
 				.short('c')
@@ -239,7 +239,8 @@ pub fn config() -> Result<Config> {
 				.required(false)
 				.value_parser(ValueParser::path_buf())
 				.action(ArgAction::Set)
-				.help("Path to an audio-conv config file, defaults to \"audio-conv.yaml\""),
+				.value_name("FILE")
+				.help("Path to the config file [default: audio-conv.yaml]"),
 		)
 		.arg(
 			Arg::new("from")
@@ -248,7 +249,8 @@ pub fn config() -> Result<Config> {
 				.required(false)
 				.value_parser(ValueParser::path_buf())
 				.action(ArgAction::Set)
-				.help("\"from\" directory path"),
+				.value_name("DIR")
+				.help("Directory with the source files, overrides \"from\" of the config file"),
 		)
 		.arg(
 			Arg::new("to")
@@ -257,7 +259,10 @@ pub fn config() -> Result<Config> {
 				.required(false)
 				.value_parser(ValueParser::path_buf())
 				.action(ArgAction::Set)
-				.help("\"to\" directory path"),
+				.value_name("DIR")
+				.help(
+					"Directory the converted files are written to, overrides \"to\" of the config file",
+				),
 		)
 		.arg(
 			Arg::new("jobs")
@@ -266,9 +271,13 @@ pub fn config() -> Result<Config> {
 				.required(false)
 				.value_parser(clap::value_parser!(usize))
 				.action(ArgAction::Set)
-				.help("Allow N jobs/transcodes at once. Defaults to number of logical cores"),
+				.value_name("N")
+				.help("Number of files converted at once [default: number of logical cores]"),
 		)
-		.subcommand(Command::new("init").about("writes an example config"))
+		.subcommand(
+			Command::new("init")
+				.about("Writes an example config to audio-conv.yaml (or the --config path)"),
+		)
 		.get_matches();
 
 	let current_dir = std::env::current_dir().context("Could not get current directory")?;
