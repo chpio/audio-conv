@@ -16,7 +16,9 @@ categories = [
 keywords = ["audio", "converter", "opus", "flac", "gstreamer"]
 include = [
 	"/src/**/*",
+	"/tests/**/*",
 	"/example.audio-conv.yaml",
+	"/audio-conv.schema.json",
 	"/README.md",
 	"/CHANGELOG.md",
 	"/LICENSE-APACHE",

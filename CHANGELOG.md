@@ -4,6 +4,7 @@
 
 * add `--delete` to log the files in "to" that don't belong to a file in "from", and `--force`
   to delete them
+* include the tests in the crates.io package
 
 ## 1.4.1
 
