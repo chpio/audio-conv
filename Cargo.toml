@@ -19,6 +19,8 @@ include = [
 	"/example.audio-conv.yaml",
 	"/README.md",
 	"/CHANGELOG.md",
+	"/LICENSE-APACHE",
+	"/LICENSE-MIT",
 ]
 
 [dependencies]

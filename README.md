@@ -101,3 +101,8 @@ configs add this line at the top:
 ```yaml
 # yaml-language-server: $schema=https://gitlab.com/chpio/audio-conv/-/raw/main/audio-conv.schema.json
 ```
+
+## License
+
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or
+[MIT license](LICENSE-MIT) at your option.
