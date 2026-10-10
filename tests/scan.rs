@@ -1,50 +1,18 @@
+mod common;
+
 use ::audio_conv::{
-	context::{Context, Transcode, TranscodeMatch, TranscodeMatchFile, compile_matches},
-	log::Log,
+	context::{Context, Transcode, compile_matches},
 	scan::{ConversionArgs, find_transcode, get_conversion_args},
 };
 use ::std::{
-	fs::{self, File},
+	fs,
 	path::{Path, PathBuf},
 	time::{Duration, SystemTime},
 };
-use ::tempfile::TempDir;
-
-fn compile(yaml: &str) -> Vec<TranscodeMatch> {
-	let matches: Vec<TranscodeMatchFile> = serde_yaml_ng::from_str(yaml).unwrap();
-	compile_matches(&matches).unwrap()
-}
-
-struct Dirs {
-	_tmp: TempDir,
-	ctx: Context,
-}
-
-fn dirs(matches: Vec<TranscodeMatch>) -> Dirs {
-	let tmp = tempfile::tempdir().unwrap();
-	let from = tmp.path().join("from");
-	let to = tmp.path().join("to");
-	let config_path = tmp.path().join("audio-conv.yaml");
-	let log = Log::new(tmp.path().join("audio-conv.log"));
-	fs::create_dir(&from).unwrap();
-	fs::create_dir(&to).unwrap();
-	Dirs {
-		_tmp: tmp,
-		ctx: Context {
-			config_path,
-			from,
-			to,
-			matches,
-			jobs: None,
-			delete: None,
-			log,
-		},
-	}
-}
+use common::{compile, dirs};
 
 fn touch(path: &Path, mtime: SystemTime) {
-	fs::create_dir_all(path.parent().unwrap()).unwrap();
-	File::create(path).unwrap().set_modified(mtime).unwrap();
+	common::touch(path).set_modified(mtime).unwrap();
 }
 
 fn scan(ctx: &Context) -> Vec<ConversionArgs> {

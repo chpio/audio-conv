@@ -1,50 +1,12 @@
+mod common;
+
 use ::audio_conv::{
-	context::{Context, Delete, DeleteMode, TranscodeMatch, TranscodeMatchFile, compile_matches},
+	context::{Context, Delete, DeleteMode, TranscodeMatch, compile_matches},
 	delete::{find_orphans, remove, run},
 	log::Log,
 };
-use ::std::{
-	fs::{self, File},
-	path::{Path, PathBuf},
-};
-use ::tempfile::TempDir;
-
-fn compile(yaml: &str) -> Vec<TranscodeMatch> {
-	let matches: Vec<TranscodeMatchFile> = serde_yaml_ng::from_str(yaml).unwrap();
-	compile_matches(&matches).unwrap()
-}
-
-struct Dirs {
-	_tmp: TempDir,
-	ctx: Context,
-}
-
-fn dirs(matches: Vec<TranscodeMatch>) -> Dirs {
-	let tmp = tempfile::tempdir().unwrap();
-	// canonical like the paths from the config
-	let root = tmp.path().canonicalize().unwrap();
-	let from = root.join("from");
-	let to = root.join("to");
-	fs::create_dir(&from).unwrap();
-	fs::create_dir(&to).unwrap();
-	Dirs {
-		_tmp: tmp,
-		ctx: Context {
-			config_path: root.join("audio-conv.yaml"),
-			from,
-			to,
-			matches,
-			jobs: None,
-			delete: None,
-			log: Log::new(root.join("audio-conv.log")),
-		},
-	}
-}
-
-fn touch(path: &Path) {
-	fs::create_dir_all(path.parent().unwrap()).unwrap();
-	File::create(path).unwrap();
-}
+use ::std::{fs, path::PathBuf};
+use common::{Dirs, compile, dirs, touch};
 
 fn orphans(ctx: &Context, mode: DeleteMode) -> Vec<PathBuf> {
 	find_orphans(ctx, mode)

@@ -19,7 +19,7 @@ cargo run -- -f <from> -t <to> [-j N] [-c config.yaml]
 cargo outdated -R          # find outdated direct deps
 ```
 
-Tests live in `tests/` (integration tests against the library, no inline `#[cfg(test)]` modules) and cover config/match compilation, the directory scan and the encoder/muxer elements per codec (`tests/gstreamer.rs`, needs the GStreamer plugins of all codecs installed); the full transcode of files and the UI are untested.
+Tests live in `tests/` (integration tests against the library, no inline `#[cfg(test)]` modules, shared helpers for a `Context` on temporary dirs in `tests/common/mod.rs`) and cover config/match compilation, the directory scan and the encoder/muxer elements per codec (`tests/gstreamer.rs`, needs the GStreamer plugins of all codecs installed); the full transcode of files and the UI are untested.
 
 ## Architecture
 
