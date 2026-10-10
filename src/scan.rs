@@ -1,6 +1,6 @@
-use crate::config::{Config, Transcode};
+use crate::config::{Config, Transcode, TranscodeMatch};
 use ::anyhow::{Context, Error, Result};
-use ::std::path::PathBuf;
+use ::std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct ConversionArgs {
@@ -14,16 +14,8 @@ pub fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<Conve
 		.filter_map(|e| e.ok())
 		.filter(|e| e.file_type().is_file())
 		.map(move |e| -> Result<Option<ConversionArgs>> {
-			let from_bytes = e.path().as_os_str().as_encoded_bytes();
-
-			let transcode = config
-				.matches
-				.iter()
-				.filter(|m| m.regexes.iter().any(|regex| regex.is_match(from_bytes)))
-				.map(|m| m.to.clone())
-				.next();
-			let transcode = if let Some(transcode) = transcode {
-				transcode
+			let transcode = if let Some(transcode) = find_transcode(&config.matches, e.path()) {
+				transcode.clone()
 			} else {
 				return Ok(None);
 			};
@@ -72,4 +64,13 @@ pub fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<Conve
 			}
 		})
 		.filter_map(|e| e.transpose())
+}
+
+/// Returns the transcode of the first match whose regexes match `path`.
+pub fn find_transcode<'a>(matches: &'a [TranscodeMatch], path: &Path) -> Option<&'a Transcode> {
+	let path_bytes = path.as_os_str().as_encoded_bytes();
+	matches
+		.iter()
+		.find(|m| m.regexes.iter().any(|regex| regex.is_match(path_bytes)))
+		.map(|m| &m.to)
 }

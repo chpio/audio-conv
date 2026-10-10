@@ -98,25 +98,25 @@ pub enum BitrateType {
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct ConfigFile {
-	from: Option<PathBuf>,
-	to: Option<PathBuf>,
+pub struct ConfigFile {
+	pub from: Option<PathBuf>,
+	pub to: Option<PathBuf>,
 
 	#[serde(default)]
-	matches: Vec<TranscodeMatchFile>,
+	pub matches: Vec<TranscodeMatchFile>,
 
-	jobs: Option<usize>,
+	pub jobs: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
-struct TranscodeMatchFile {
-	glob: Option<String>,
-	regex: Option<String>,
+pub struct TranscodeMatchFile {
+	pub glob: Option<String>,
+	pub regex: Option<String>,
 
 	#[serde(default)]
-	extensions: Vec<String>,
+	pub extensions: Vec<String>,
 
-	to: Transcode,
+	pub to: Transcode,
 }
 
 pub fn config() -> Result<Config> {
@@ -198,71 +198,12 @@ pub fn config() -> Result<Config> {
 		)));
 	}
 
-	let default_regex = RegexBuilder::new("\\.(flac|wav)$")
-		.case_insensitive(true)
-		.build()
-		.expect("Failed compiling default match regex");
-
-	let transcode_matches = config_file
-		.as_ref()
-		.map(|config_file| {
-			config_file
-				.matches
-				.iter()
-				.map(|m| {
-					let glob = m.glob.iter().map(|glob| {
-						let glob = GlobBuilder::new(glob)
-							.case_insensitive(true)
-							.build()
-							.context("Failed building glob")?;
-						let regex = Regex::new(glob.regex()).context("Failed compiling regex")?;
-						Ok(regex)
-					});
-
-					let regex = m.regex.iter().map(|regex| {
-						let regex = RegexBuilder::new(regex)
-							.case_insensitive(true)
-							.build()
-							.context("Failed compiling regex")?;
-						Ok(regex)
-					});
-
-					let extensions = m.extensions.iter().map(|ext| {
-						let mut ext = regex::escape(ext);
-						ext.insert_str(0, "\\.");
-						ext.push('$');
-
-						let regex = RegexBuilder::new(&ext)
-							.case_insensitive(true)
-							.build()
-							.context("Failed compiling regex")?;
-						Ok(regex)
-					});
-
-					let mut regexes = glob
-						.chain(regex)
-						.chain(extensions)
-						.collect::<Result<Vec<_>>>()?;
-
-					if regexes.is_empty() {
-						regexes.push(default_regex.clone());
-					}
-
-					Ok(TranscodeMatch {
-						regexes,
-						to: m.to.clone(),
-					})
-				})
-				.collect::<Result<Vec<_>>>()
-		})
-		.transpose()?
-		.filter(|matches| !matches.is_empty())
-		.unwrap_or_else(|| {
-			vec![TranscodeMatch {
-				regexes: vec![default_regex],
-				to: Transcode::default(),
-			}]
-		});
+	let transcode_matches = compile_matches(
+		config_file
+			.as_ref()
+			.map(|c| c.matches.as_slice())
+			.unwrap_or_default(),
+	)?;
 
 	Ok(Config {
 		from: {
@@ -296,6 +237,69 @@ pub fn config() -> Result<Config> {
 			.get_one("jobs")
 			.copied()
 			.or_else(|| config_file.as_ref().and_then(|c| c.jobs)),
+	})
+}
+
+fn default_regex() -> Regex {
+	RegexBuilder::new("\\.(flac|wav)$")
+		.case_insensitive(true)
+		.build()
+		.expect("Failed compiling default match regex")
+}
+
+pub fn compile_matches(matches: &[TranscodeMatchFile]) -> Result<Vec<TranscodeMatch>> {
+	if matches.is_empty() {
+		return Ok(vec![TranscodeMatch {
+			regexes: vec![default_regex()],
+			to: Transcode::default(),
+		}]);
+	}
+
+	matches.iter().map(compile_match).collect()
+}
+
+fn compile_match(m: &TranscodeMatchFile) -> Result<TranscodeMatch> {
+	let glob = m.glob.iter().map(|glob| {
+		let glob = GlobBuilder::new(glob)
+			.case_insensitive(true)
+			.build()
+			.context("Failed building glob")?;
+		let regex = Regex::new(glob.regex()).context("Failed compiling regex")?;
+		Ok(regex)
+	});
+
+	let regex = m.regex.iter().map(|regex| {
+		let regex = RegexBuilder::new(regex)
+			.case_insensitive(true)
+			.build()
+			.context("Failed compiling regex")?;
+		Ok(regex)
+	});
+
+	let extensions = m.extensions.iter().map(|ext| {
+		let mut ext = regex::escape(ext);
+		ext.insert_str(0, "\\.");
+		ext.push('$');
+
+		let regex = RegexBuilder::new(&ext)
+			.case_insensitive(true)
+			.build()
+			.context("Failed compiling regex")?;
+		Ok(regex)
+	});
+
+	let mut regexes = glob
+		.chain(regex)
+		.chain(extensions)
+		.collect::<Result<Vec<_>>>()?;
+
+	if regexes.is_empty() {
+		regexes.push(default_regex());
+	}
+
+	Ok(TranscodeMatch {
+		regexes,
+		to: m.to.clone(),
 	})
 }
 

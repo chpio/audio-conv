@@ -1,10 +1,5 @@
-mod config;
-mod scan;
-mod tag;
-mod transcode;
-mod ui;
-
 use ::anyhow::{Context, Result};
+use ::audio_conv::{config, scan, tag, transcode, ui};
 use ::futures::prelude::*;
 use ::std::{fmt::Write as FmtWrite, path::Path};
 use ::tokio::{fs, io::AsyncWriteExt, task};
