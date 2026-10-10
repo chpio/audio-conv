@@ -135,3 +135,17 @@ fn copy_keeps_extension() {
 
 	assert!(scan(&d.config).is_empty());
 }
+
+#[test]
+fn copy_audio_uses_configured_extension() {
+	let d = dirs(compile(
+		"[{extensions: [mkv], to: {codec: copy_audio, extension: m4a}}]",
+	));
+	touch(&d.config.from.join("video.mkv"), hours_ago(2));
+
+	assert_eq!(rel_paths(&scan(&d.config)), [PathBuf::from("video.mkv")]);
+
+	touch(&d.config.to.join("video.m4a"), hours_ago(1));
+
+	assert!(scan(&d.config).is_empty());
+}

@@ -51,6 +51,10 @@ pub enum Transcode {
 
 	#[serde(rename = "copy")]
 	Copy,
+
+	/// Copies the first audio stream without transcoding it, e.g. the audio of a video file.
+	#[serde(rename = "copy_audio")]
+	CopyAudio { extension: AudioExtension },
 }
 
 impl Transcode {
@@ -61,6 +65,45 @@ impl Transcode {
 			Transcode::Flac { .. } => Some("flac"),
 			Transcode::Mp3 { .. } => Some("mp3"),
 			Transcode::Copy => None,
+			Transcode::CopyAudio { extension } => Some(extension.as_str()),
+		}
+	}
+}
+
+/// Container for `copy_audio`, the audio codec of the source has to be supported by it.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub enum AudioExtension {
+	/// MP4 audio, e.g. for AAC or ALAC
+	#[serde(rename = "m4a")]
+	M4a,
+	/// Matroska audio, supports nearly every audio codec
+	#[serde(rename = "mka")]
+	Mka,
+	/// Ogg, e.g. for Vorbis, Opus or FLAC
+	#[serde(rename = "ogg")]
+	Ogg,
+	/// Ogg, for Opus
+	#[serde(rename = "opus")]
+	Opus,
+	/// WebM, for Vorbis or Opus
+	#[serde(rename = "webm")]
+	Webm,
+	#[serde(rename = "mp3")]
+	Mp3,
+	#[serde(rename = "flac")]
+	Flac,
+}
+
+impl AudioExtension {
+	pub fn as_str(self) -> &'static str {
+		match self {
+			AudioExtension::M4a => "m4a",
+			AudioExtension::Mka => "mka",
+			AudioExtension::Ogg => "ogg",
+			AudioExtension::Opus => "opus",
+			AudioExtension::Webm => "webm",
+			AudioExtension::Mp3 => "mp3",
+			AudioExtension::Flac => "flac",
 		}
 	}
 }

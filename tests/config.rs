@@ -1,5 +1,6 @@
 use ::audio_conv::config::{
-	BitrateType, ConfigFile, Transcode, TranscodeMatch, TranscodeMatchFile, compile_matches,
+	AudioExtension, BitrateType, ConfigFile, Transcode, TranscodeMatch, TranscodeMatchFile,
+	compile_matches,
 };
 use ::std::path::Path;
 
@@ -121,6 +122,25 @@ fn codec_defaults() {
 		to("codec: flac"),
 		Transcode::Flac { compression: 5 }
 	));
+}
+
+#[test]
+fn copy_audio_uses_configured_extension() {
+	let to = serde_yaml_ng::from_str::<Transcode>("{codec: copy_audio, extension: m4a}").unwrap();
+
+	assert!(matches!(
+		to,
+		Transcode::CopyAudio {
+			extension: AudioExtension::M4a
+		}
+	));
+	assert_eq!(to.extension(), Some("m4a"));
+}
+
+#[test]
+fn copy_audio_needs_a_known_extension() {
+	assert!(serde_yaml_ng::from_str::<Transcode>("codec: copy_audio").is_err());
+	assert!(serde_yaml_ng::from_str::<Transcode>("{codec: copy_audio, extension: aac}").is_err());
 }
 
 #[test]

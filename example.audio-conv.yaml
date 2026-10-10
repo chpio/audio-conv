@@ -37,3 +37,12 @@ matches:
   #     - webm
   #   to:
   #     codec: opus
+
+  # or copied without transcoding it (fails if the audio codec isn't supported by the container):
+  # - extensions:
+  #     - mp4
+  #   to:
+  #     codec: copy_audio
+  #     # one of: m4a (e.g. AAC, ALAC), mka (nearly every codec), ogg (Vorbis, Opus, FLAC),
+  #     # opus, webm (Vorbis, Opus), mp3 or flac
+  #     extension: m4a

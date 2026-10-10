@@ -1,6 +1,6 @@
 use super::error::{GBoxErrorWrapper, GErrorMessage};
 use crate::{
-	config::{self, Transcode},
+	config::{self, AudioExtension, Transcode},
 	ui,
 };
 use ::anyhow::{Context, Error, Result};
@@ -60,30 +60,37 @@ pub async fn transcode_gstreamer(
 ) -> Result<()> {
 	let file_src: Element = gmake("filesrc", &[("location", &from_path)])?;
 
-	let decodebin: Element = gmake("decodebin", &[])?;
+	// `copy_audio` needs the audio stream only demuxed and parsed, everything else decoded
+	let src_bin: Element = if let Transcode::CopyAudio { .. } = transcode {
+		gmake("parsebin", &[])?
+	} else {
+		let decodebin: Element = gmake("decodebin", &[])?;
 
-	// expose video streams (e.g. from video files or embedded cover art) undecoded, they are
-	// ignored anyway and decoding them would only waste cpu time
-	let select_result_type = glib::Type::from_name("GstAutoplugSelectResult")
-		.context("Could not get type `GstAutoplugSelectResult`")?;
-	decodebin.connect("autoplug-select", false, move |args| {
-		let factory = args[3]
-			.get::<gstreamer::ElementFactory>()
-			.expect("autoplug-select: 4. arg is not an ElementFactory");
-		let is_video_decoder = factory.has_type(
-			gstreamer::ElementFactoryType::DECODER
-				| gstreamer::ElementFactoryType::MEDIA_VIDEO
-				| gstreamer::ElementFactoryType::MEDIA_IMAGE,
-		);
-		let result = if is_video_decoder { "expose" } else { "try" };
-		glib::EnumClass::with_type(select_result_type)
-			.and_then(|class| class.to_value_by_nick(result))
-	});
+		// expose video streams (e.g. from video files or embedded cover art) undecoded, they are
+		// ignored anyway and decoding them would only waste cpu time
+		let select_result_type = glib::Type::from_name("GstAutoplugSelectResult")
+			.context("Could not get type `GstAutoplugSelectResult`")?;
+		decodebin.connect("autoplug-select", false, move |args| {
+			let factory = args[3]
+				.get::<gstreamer::ElementFactory>()
+				.expect("autoplug-select: 4. arg is not an ElementFactory");
+			let is_video_decoder = factory.has_type(
+				gstreamer::ElementFactoryType::DECODER
+					| gstreamer::ElementFactoryType::MEDIA_VIDEO
+					| gstreamer::ElementFactoryType::MEDIA_IMAGE,
+			);
+			let result = if is_video_decoder { "expose" } else { "try" };
+			glib::EnumClass::with_type(select_result_type)
+				.and_then(|class| class.to_value_by_nick(result))
+		});
+
+		decodebin
+	};
 
 	// only the first audio stream gets transcoded, all of them would write into the same file
 	let audio_linked = Arc::new(AtomicBool::new(false));
 
-	let src_elems: &[&Element] = &[&file_src, &decodebin];
+	let src_elems: &[&Element] = &[&file_src, &src_bin];
 
 	let pipeline = gstreamer::Pipeline::new();
 
@@ -95,7 +102,7 @@ pub async fn transcode_gstreamer(
 
 	let to_path_clone = to_path.to_owned();
 	let audio_linked_clone = audio_linked.clone();
-	decodebin.connect_pad_added(move |decodebin, src_pad| {
+	src_bin.connect_pad_added(move |src_bin, src_pad| {
 		let insert_sink = || -> Result<()> {
 			let pipeline = match pipeline_weak.upgrade() {
 				Some(pipeline) => pipeline,
@@ -105,11 +112,13 @@ pub async fn transcode_gstreamer(
 				}
 			};
 
-			let is_audio = src_pad.current_caps().and_then(|caps| {
-				caps.structure(0).map(|s| {
-					let name = s.name();
-					name.starts_with("audio/")
-				})
+			// parsebin may expose pads before their caps are fixed, fall back to the possible caps
+			let caps = src_pad
+				.current_caps()
+				.unwrap_or_else(|| src_pad.query_caps(None));
+			let is_audio = caps.structure(0).map(|s| {
+				let name = s.name();
+				name.starts_with("audio/")
 			});
 			match is_audio {
 				None => {
@@ -130,19 +139,19 @@ pub async fn transcode_gstreamer(
 				return Ok(());
 			}
 
-			let resample: Element = gmake(
-				"audioresample",
-				&[
-					// quality from 0 to 10
-					("quality", &10i32),
-				],
-			)?;
+			let mut dest_elems = Vec::new();
 
-			let mut dest_elems = vec![
-				resample,
+			if !matches!(transcode, Transcode::CopyAudio { .. }) {
+				dest_elems.push(gmake(
+					"audioresample",
+					&[
+						// quality from 0 to 10
+						("quality", &10i32),
+					],
+				)?);
 				// `audioconvert` converts audio format, bitdepth, ...
-				gmake("audioconvert", &[])?,
-			];
+				dest_elems.push(gmake("audioconvert", &[])?);
+			}
 
 			match &transcode {
 				Transcode::Opus {
@@ -208,6 +217,19 @@ pub async fn transcode_gstreamer(
 					dest_elems.push(gmake("id3v2mux", &[])?);
 				}
 
+				Transcode::CopyAudio { extension } => {
+					let muxer = match extension {
+						AudioExtension::M4a => "mp4mux",
+						AudioExtension::Mka => "matroskamux",
+						AudioExtension::Ogg | AudioExtension::Opus => "oggmux",
+						AudioExtension::Webm => "webmmux",
+						// mp3 and flac need no container, these elements only write the tags
+						AudioExtension::Mp3 => "id3v2mux",
+						AudioExtension::Flac => "flactag",
+					};
+					dest_elems.push(gmake(muxer, &[])?);
+				}
+
 				Transcode::Copy => {
 					// already handled outside this fn
 					unreachable!();
@@ -227,28 +249,27 @@ pub async fn transcode_gstreamer(
 				e.sync_state_with_parent()?;
 			}
 
+			// muxers only have request pads, `compatible_pad` requests them as needed
 			let sink_pad = dest_elems
 				.first()
 				.unwrap()
-				.static_pad("sink")
-				.expect("1. dest element has no sinkpad");
+				.compatible_pad(src_pad, Some(&caps))
+				.with_context(|| match &transcode {
+					Transcode::CopyAudio { extension } => format!(
+						"The audio stream can't be stored in a .{} file without transcoding \
+							 it, caps: {}",
+						extension.as_str(),
+						caps
+					),
+					_ => format!("Could not link the audio stream, caps: {}", caps),
+				})?;
 			src_pad.link(&sink_pad)?;
 
 			Ok(())
 		};
 
 		if let Err(err) = insert_sink() {
-			post_error(decodebin, err, "Failed to insert sink");
-		}
-	});
-
-	decodebin.connect_no_more_pads(move |decodebin| {
-		if !audio_linked.load(Ordering::SeqCst) {
-			post_error(
-				decodebin,
-				Error::msg("No audio stream found"),
-				"No audio stream found",
-			);
+			post_error(src_bin, err, "Failed to insert sink");
 		}
 	});
 
@@ -271,6 +292,7 @@ pub async fn transcode_gstreamer(
 					}
 					MessageView::Error(err) => {
 						let pipe_stop_res = pipeline.set_state(gstreamer::State::Null);
+						let no_audio = !audio_linked.load(Ordering::SeqCst);
 
 						let err: Error = err
 							.details()
@@ -298,6 +320,14 @@ pub async fn transcode_gstreamer(
 								}
 								.into()
 							});
+
+						// without an audio stream all pads are unlinked, the demuxer fails with a
+						// cryptic "not-linked" error
+						let err = if no_audio {
+							err.context("No audio stream found")
+						} else {
+							err
+						};
 
 						if let Err(pipe_err) = pipe_stop_res {
 							let err = err.context(pipe_err).context(
@@ -332,7 +362,7 @@ pub async fn transcode_gstreamer(
 		loop {
 			progress_interval.tick().await;
 
-			let dur = decodebin
+			let dur = src_bin
 				.query_duration::<ClockTime>()
 				.map(|time| time.nseconds());
 
@@ -341,7 +371,7 @@ pub async fn transcode_gstreamer(
 					return None;
 				}
 
-				let pos = decodebin
+				let pos = src_bin
 					.query_position::<ClockTime>()
 					.map(|time| time.nseconds());
 
@@ -368,6 +398,10 @@ pub async fn transcode_gstreamer(
 	pipeline
 		.set_state(gstreamer::State::Null)
 		.context("Unable to set the pipeline to the `Null` state")?;
+
+	if !audio_linked.load(Ordering::SeqCst) {
+		return Err(Error::msg("No audio stream found"));
+	}
 
 	Ok(())
 }
