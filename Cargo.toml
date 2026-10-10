@@ -38,3 +38,6 @@ ratatui = { version = "0.30", default-features = false, features = ["crossterm"]
 version = "1"
 default-features = false
 features = ["sync", "rt", "macros", "time", "fs", "io-util"]
+
+[dev-dependencies]
+tempfile = "3"

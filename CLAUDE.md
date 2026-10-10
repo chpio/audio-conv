@@ -10,14 +10,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 cargo build
-cargo clippy
+cargo clippy --all-targets
+cargo test
 cargo fmt                  # hard tabs (.rustfmt.toml)
 cargo run -- init          # writes example.audio-conv.yaml as ./audio-conv.yaml
 cargo run -- -f <from> -t <to> [-j N] [-c config.yaml]
 cargo outdated -R          # find outdated direct deps (cargo info/search don't work: crates-io is mirrored via kellnr)
 ```
 
-There are no tests.
+Tests live in `tests/` (integration tests against the library, no inline `#[cfg(test)]` modules) and cover config/match compilation and the directory scan; transcoding and the UI are untested.
 
 ## Architecture
 
