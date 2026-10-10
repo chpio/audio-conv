@@ -71,13 +71,14 @@ pub fn walk(ctx: &Context) -> Result<Scan> {
 
 /// The scanned files whose target is missing or older than the source.
 pub fn jobs(ctx: &Context, scan: &Scan) -> Result<Vec<ConversionArgs>> {
-	let mut jobs = Vec::new();
-	for args in &scan.files {
-		if needs_conversion(ctx, args)? {
-			jobs.push(args.clone());
-		}
-	}
-	Ok(jobs)
+	scan.files
+		.iter()
+		.filter_map(|args| {
+			needs_conversion(ctx, args)
+				.map(|needed| needed.then(|| args.clone()))
+				.transpose()
+		})
+		.collect()
 }
 
 fn needs_conversion(ctx: &Context, args: &ConversionArgs) -> Result<bool> {
