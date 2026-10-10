@@ -23,15 +23,20 @@ fn dirs(matches: Vec<TranscodeMatch>) -> Dirs {
 	let tmp = tempfile::tempdir().unwrap();
 	let from = tmp.path().join("from");
 	let to = tmp.path().join("to");
+	let config_path = tmp.path().join("audio-conv.yaml");
+	let log_path = tmp.path().join("audio-conv.log");
 	fs::create_dir(&from).unwrap();
 	fs::create_dir(&to).unwrap();
 	Dirs {
 		_tmp: tmp,
 		config: Config {
+			config_path,
+			log_path,
 			from,
 			to,
 			matches,
 			jobs: None,
+			delete: None,
 		},
 	}
 }

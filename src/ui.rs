@@ -1,4 +1,4 @@
-use crate::scan::ConversionArgs;
+use crate::{config::Config, delete::Deleted, scan::ConversionArgs};
 use ::anyhow::{Context, Result};
 use ::futures::Future;
 use ::ratatui::{
@@ -6,8 +6,7 @@ use ::ratatui::{
 	backend::{Backend, CrosstermBackend},
 };
 use ::std::{
-	borrow::Cow, cell::RefCell, collections::HashMap, io, mem, path::PathBuf, rc::Rc,
-	time::Duration,
+	borrow::Cow, cell::RefCell, collections::HashMap, io, mem, rc::Rc, sync::Arc, time::Duration,
 };
 use ::tokio::{task, time::interval};
 
@@ -15,7 +14,6 @@ pub const UPDATE_INTERVAL_MILLIS: u64 = 100;
 
 #[derive(Debug)]
 pub enum Msg {
-	Init { task_len: usize, log_path: PathBuf },
 	Exit,
 	TaskStart { id: usize, args: ConversionArgs },
 	TaskEnd { id: usize },
@@ -47,36 +45,34 @@ impl MsgQueue {
 
 struct State {
 	terminal: Terminal<CrosstermBackend<io::Stdout>>,
-	log_path: Option<PathBuf>,
-	task_len: Option<usize>,
+	config: Arc<Config>,
+	task_len: usize,
 	ended_tasks: usize,
 	running_tasks: HashMap<usize, Task>,
 	has_rendered: bool,
 	has_errored: bool,
+	deleted: Option<Deleted>,
 }
 
 impl State {
-	fn new() -> Result<State> {
+	fn new(config: Arc<Config>, task_len: usize, deleted: Option<Deleted>) -> Result<State> {
 		let terminal = Terminal::new(CrosstermBackend::new(io::stdout()))
 			.context("Unable to create ui terminal")?;
 
 		Ok(State {
 			terminal,
-			log_path: None,
-			task_len: None,
+			config,
+			task_len,
 			ended_tasks: 0,
 			running_tasks: HashMap::new(),
 			has_rendered: false,
-			has_errored: false,
+			has_errored: deleted.as_ref().is_some_and(|deleted| deleted.failed > 0),
+			deleted,
 		})
 	}
 
 	fn process_msg(&mut self, msg: Msg) -> Result<bool> {
 		match msg {
-			Msg::Init { task_len, log_path } => {
-				self.task_len = Some(task_len);
-				self.log_path = Some(log_path);
-			}
 			Msg::Exit => return Ok(false),
 			Msg::TaskStart { id, args } => {
 				self.running_tasks.insert(
@@ -117,17 +113,13 @@ impl State {
 		use ::ratatui::{
 			layout::{Constraint, Direction, Layout, Rect},
 			style::{Color, Modifier, Style},
-			text::Text,
+			text::{Line, Text},
 			widgets::{Block, Borders, Gauge, Paragraph},
 		};
 
-		let task_len = if let Some(task_len) = self.task_len {
-			task_len
-		} else {
-			return Ok(());
-		};
+		let task_len = self.task_len;
 
-		if task_len == 0 {
+		if task_len == 0 && self.deleted.is_none() {
 			return Ok(());
 		}
 
@@ -146,20 +138,35 @@ impl State {
 			self.has_rendered = true;
 		}
 
-		let error_text = match self.has_errored {
-			true => {
-				let text: Cow<'static, str> = self
-					.log_path
-					.as_ref()
-					.map(|lp| {
-						let text = format!("Error(s) occurred and were logged to {}", lp.display());
-						Cow::Owned(text)
-					})
-					.unwrap_or_else(|| Cow::Borrowed("Error(s) occurred"));
-				Some(text)
-			}
-			false => None,
-		};
+		let logged_to = format!(" and were logged to {}", self.config.log_path.display());
+
+		let mut status = Vec::new();
+
+		if let Some(deleted) = &self.deleted {
+			let text = match (deleted.files, deleted.force) {
+				(0, _) => Cow::Borrowed("No files to delete"),
+				(files, false) => Cow::Owned(format!(
+					"{files} file(s) would be deleted{logged_to}, use --force to delete them"
+				)),
+				(files, true) => Cow::Owned(format!("{files} file(s) were deleted{logged_to}")),
+			};
+			status.push(Line::styled(
+				text,
+				Style::default().fg(Color::Yellow).bg(Color::Black),
+			));
+		}
+
+		if self.has_errored {
+			status.push(Line::styled(
+				format!("Error(s) occurred{logged_to}"),
+				Style::default()
+					.fg(Color::Red)
+					.bg(Color::Black)
+					.add_modifier(Modifier::BOLD),
+			));
+		}
+
+		let status_height = status.len() as u16;
 
 		self.terminal
 			.draw(|f| {
@@ -171,8 +178,8 @@ impl State {
 
 				let mut task_rect = chunks[0];
 
-				if error_text.is_some() {
-					task_rect.height -= 3;
+				if status_height > 0 {
+					task_rect.height = task_rect.height.saturating_sub(status_height + 1);
 				}
 
 				for (row, task) in running_tasks
@@ -199,15 +206,15 @@ impl State {
 					);
 				}
 
-				if let Some(error_text) = error_text {
+				if status_height > 0 {
 					f.render_widget(
-						Paragraph::new(Text::raw(error_text)).style(
-							Style::default()
-								.fg(Color::Red)
-								.bg(Color::Black)
-								.add_modifier(Modifier::BOLD),
+						Paragraph::new(Text::from(status)),
+						Rect::new(
+							task_rect.x,
+							task_rect.y + task_rect.height + 1,
+							task_rect.width,
+							status_height,
 						),
-						Rect::new(task_rect.x, task_rect.height + 1, task_rect.width, 2),
 					);
 				}
 
@@ -224,7 +231,11 @@ impl State {
 								.bg(Color::Black)
 								.add_modifier(Modifier::ITALIC),
 						)
-						.ratio(tasks_ended as f64 / task_len as f64),
+						.ratio(if task_len == 0 {
+							1.0
+						} else {
+							tasks_ended as f64 / task_len as f64
+						}),
 					chunks[1],
 				);
 			})
@@ -241,13 +252,17 @@ struct Task {
 	args: ConversionArgs,
 }
 
-pub fn init() -> (MsgQueue, impl Future<Output = Result<()>>) {
+pub fn init(
+	config: Arc<Config>,
+	task_len: usize,
+	deleted: Option<Deleted>,
+) -> (MsgQueue, impl Future<Output = Result<()>>) {
 	let queue = MsgQueue::new();
 
 	let queue_clone = queue.clone();
 	let fut = async move {
 		let mut interval = interval(Duration::from_millis(UPDATE_INTERVAL_MILLIS));
-		let mut wrapped = Some((Vec::new(), State::new()?));
+		let mut wrapped = Some((Vec::new(), State::new(config, task_len, deleted)?));
 
 		loop {
 			interval.tick().await;

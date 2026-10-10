@@ -46,10 +46,12 @@ $ audio-conv
 The config file and its settings can be overridden on the command line:
 
 ```
--c, --config <FILE>  Path to the config file [default: audio-conv.yaml]
--f, --from <DIR>     Directory with the source files, overrides "from" of the config file
--t, --to <DIR>       Directory the converted files are written to, overrides "to" of the config file
--j, --jobs <N>       Number of files converted at once [default: number of logical cores]
+-c, --config <FILE>    Path to the config file [default: audio-conv.yaml]
+-f, --from <DIR>       Directory with the source files, overrides "from" of the config file
+-t, --to <DIR>         Directory the converted files are written to, overrides "to" of the config file
+-j, --jobs <N>         Number of files converted at once [default: number of logical cores]
+    --delete[=<MODE>]  Logs the files in "to" that don't belong to a file in "from", only the ones audio-conv would create ("converted", the default) or all of them ("all") [possible values: converted, all]
+    --force            Deletes the files found by --delete instead of only logging them
 ```
 
 Paths in the config file are relative to the config file, paths on the command line relative to
@@ -57,7 +59,23 @@ the current directory.
 
 Files are only compared by their modification time, so changing the config doesn't convert
 existing files again (delete them from the target directory for that), and files deleted from the
-source directory stay in the target directory.
+source directory stay in the target directory, unless `--delete` is used.
+
+### Deleting files
+
+`--delete` finds the files in the target directory that don't belong to a file in the source
+directory, e.g. because the source file was deleted or doesn't match any more. It only writes them
+to _audio-conv.log_, they are deleted only with `--delete --force`. Directories left empty are
+deleted too. There is no config file setting for it.
+
+- `--delete` only considers files _audio-conv_ creates with the current config: files with the
+  extension of a configured codec (e.g. _.opus_), files a `copy` match would create and leftover
+  temporary files (_.tmp_). Other files, e.g. covers or playlists you added, stay.
+- `--delete=all` considers every file in the target directory.
+
+The config and log file are never deleted. Nothing is deleted if the source directory contains no
+matching file (e.g. an unmounted drive), can't be read completely, or if the source and target
+directories overlap.
 
 ## Configuration
 

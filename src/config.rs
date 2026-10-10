@@ -11,10 +11,31 @@ use ::std::{
 
 #[derive(Debug)]
 pub struct Config {
+	/// Path of the config file, it doesn't have to exist.
+	pub config_path: PathBuf,
+	/// `audio-conv.log` in the current directory.
+	pub log_path: PathBuf,
 	pub from: PathBuf,
 	pub to: PathBuf,
 	pub matches: Vec<TranscodeMatch>,
 	pub jobs: Option<usize>,
+	pub delete: Option<Delete>,
+}
+
+/// Deleting files in `to` that don't belong to a file in `from`, only given on the command line.
+#[derive(Clone, Copy, Debug)]
+pub struct Delete {
+	pub mode: DeleteMode,
+	/// Without it, the files are only logged.
+	pub force: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeleteMode {
+	/// Only files audio-conv would create with the current config.
+	Converted,
+	/// All files.
+	All,
 }
 
 #[derive(Debug)]
@@ -279,6 +300,27 @@ pub fn config() -> Result<Config> {
 				.value_name("N")
 				.help("Number of files converted at once [default: number of logical cores]"),
 		)
+		.arg(
+			Arg::new("delete")
+				.long("delete")
+				.required(false)
+				.num_args(0..=1)
+				.require_equals(true)
+				.default_missing_value("converted")
+				.value_parser(["converted", "all"])
+				.value_name("MODE")
+				.help(
+					"Logs the files in \"to\" that don't belong to a file in \"from\", only the ones \
+					 audio-conv would create (\"converted\", the default) or all of them (\"all\")",
+				),
+		)
+		.arg(
+			Arg::new("force")
+				.long("force")
+				.action(ArgAction::SetTrue)
+				.requires("delete")
+				.help("Deletes the files found by --delete instead of only logging them"),
+		)
 		.subcommand(
 			Command::new("init")
 				.about("Writes an example config to audio-conv.yaml (or the --config path)"),
@@ -326,6 +368,14 @@ pub fn config() -> Result<Config> {
 			.unwrap_or_default(),
 	)?;
 
+	let delete = arg_matches.get_one::<String>("delete").map(|mode| Delete {
+		mode: match mode.as_str() {
+			"all" => DeleteMode::All,
+			_ => DeleteMode::Converted,
+		},
+		force: arg_matches.get_flag("force"),
+	});
+
 	Ok(Config {
 		from: {
 			arg_matches
@@ -358,6 +408,10 @@ pub fn config() -> Result<Config> {
 			.get_one("jobs")
 			.copied()
 			.or_else(|| config_file.as_ref().and_then(|c| c.jobs)),
+		delete,
+		log_path: current_dir.join("audio-conv.log"),
+		// last, `config_dir` borrows it
+		config_path,
 	})
 }
 

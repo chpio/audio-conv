@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+* add `--delete` to log the files in "to" that don't belong to a file in "from", and `--force`
+  to delete them
+
 ## 1.4.1
 
 * fix the commented `regex` example in the config written by `init`, it was invalid YAML

@@ -1,17 +1,30 @@
 use ::anyhow::{Context, Result};
-use ::audio_conv::{config, scan, tag, transcode, ui};
+use ::audio_conv::{config, delete, scan, tag, transcode, ui};
 use ::futures::prelude::*;
-use ::std::{fmt::Write as FmtWrite, path::Path};
+use ::std::{fmt::Write as FmtWrite, sync::Arc};
 use ::tokio::{fs, io::AsyncWriteExt, task};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
+	let (config, conv_args) = task::spawn_blocking(init)
+		.await
+		.context("Init task failed")??;
+	let config = Arc::new(config);
+
+	let deleted = task::spawn_blocking({
+		let config = config.clone();
+		move || delete::run(&config)
+	})
+	.await
+	.context("Delete task failed")?
+	.context("Not deleting any files")?;
+
 	task::LocalSet::new()
 		.run_until(async move {
-			let (ui_queue, ui_fut) = ui::init();
+			let (ui_queue, ui_fut) = ui::init(config.clone(), conv_args.len(), deleted);
 
 			let main_handle = async move {
-				task::spawn_local(main_loop(ui_queue))
+				task::spawn_local(main_loop(config, conv_args, ui_queue))
 					.await
 					.context("Main task failed")??;
 				Result::<_>::Ok(())
@@ -31,33 +44,26 @@ async fn main() -> Result<()> {
 		.await
 }
 
-async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
-	let (config, conv_args) = task::spawn_blocking(|| -> Result<_> {
-		gstreamer::init()?;
-		gstreamer::tags::register::<tag::MbArtistId>();
-		gstreamer::tags::register::<tag::MbAlbumArtistId>();
+/// Loads the config, initializes GStreamer and scans `from`.
+fn init() -> Result<(config::Config, Vec<scan::ConversionArgs>)> {
+	let config = config::config().context("Could not get the config")?;
 
-		let config = config::config().context("Could not get the config")?;
+	gstreamer::init()?;
+	gstreamer::tags::register::<tag::MbArtistId>();
+	gstreamer::tags::register::<tag::MbAlbumArtistId>();
 
-		let conv_args = scan::get_conversion_args(&config)
-			.collect::<Result<Vec<_>>>()
-			.context("Failed loading dir structure")?;
+	let conv_args = scan::get_conversion_args(&config)
+		.collect::<Result<Vec<_>>>()
+		.context("Failed loading dir structure")?;
 
-		Ok((config, conv_args))
-	})
-	.await
-	.context("Init task failed")??;
+	Ok((config, conv_args))
+}
 
-	let log_path = Path::new(".")
-		.canonicalize()
-		.context("Unable to canonicalize path to log file")?
-		.join("audio-conv.log");
-
-	ui_queue.push(ui::Msg::Init {
-		task_len: conv_args.len(),
-		log_path: log_path.clone(),
-	});
-
+async fn main_loop(
+	config: Arc<config::Config>,
+	conv_args: Vec<scan::ConversionArgs>,
+	ui_queue: ui::MsgQueue,
+) -> Result<()> {
 	let concurrent_jobs = match config.jobs {
 		Some(jobs) => jobs,
 		None => std::thread::available_parallelism()
@@ -70,7 +76,6 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
 		.try_for_each_concurrent(concurrent_jobs, |(i, args)| {
 			let config = &config;
 			let ui_queue = &ui_queue;
-			let log_path = &log_path;
 
 			async move {
 				ui_queue.push(ui::Msg::TaskStart {
@@ -89,7 +94,7 @@ async fn main_loop(ui_queue: ui::MsgQueue) -> Result<()> {
 						let mut log_file = match fs::OpenOptions::new()
 							.create(true)
 							.append(true)
-							.open(log_path)
+							.open(&config.log_path)
 							.await
 						{
 							Ok(log_file) => log_file,
