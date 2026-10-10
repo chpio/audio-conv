@@ -51,6 +51,110 @@ fn post_error(element: &Element, err: Error, msg: &str) {
 	);
 }
 
+/// Builds the elements between the audio pad of the decodebin/parsebin and the filesink:
+/// resampling and conversion, the encoder and the muxer/tagger.
+pub fn dest_elements(transcode: &Transcode) -> Result<Vec<Element>> {
+	let mut dest_elems = Vec::new();
+
+	if !matches!(transcode, Transcode::CopyAudio { .. }) {
+		dest_elems.push(gmake(
+			"audioresample",
+			&[
+				// quality from 0 to 10
+				("quality", &10i32),
+			],
+		)?);
+		// `audioconvert` converts audio format, bitdepth, ...
+		dest_elems.push(gmake("audioconvert", &[])?);
+	}
+
+	match transcode {
+		Transcode::Opus {
+			bitrate,
+			bitrate_type,
+		} => {
+			let encoder: Element = gmake(
+				"opusenc",
+				&[(
+					"bitrate",
+					&i32::from(*bitrate)
+						.checked_mul(1_000)
+						.context("Bitrate overflowed")?,
+				)],
+			)?;
+			// enum properties can't be set from a plain string value, they need to be
+			// parsed from their nick
+			encoder.set_property_from_str(
+				"bitrate-type",
+				match bitrate_type {
+					config::BitrateType::Vbr => "vbr",
+					config::BitrateType::Cbr => "cbr",
+				},
+			);
+
+			dest_elems.push(encoder);
+			dest_elems.push(gmake("oggmux", &[])?);
+		}
+
+		Transcode::Flac { compression } => {
+			if *compression > 9 {
+				return Err(Error::msg(format!(
+					"Invalid flac compression {}, must be between 0 and 9",
+					compression
+				)));
+			}
+
+			let encoder: Element = gmake("flacenc", &[])?;
+			encoder.set_property_from_str("quality", &compression.to_string());
+			dest_elems.push(encoder);
+		}
+
+		Transcode::Mp3 {
+			bitrate,
+			bitrate_type,
+		} => {
+			let encoder: Element = gmake(
+				"lamemp3enc",
+				&[
+					("bitrate", &i32::from(*bitrate)),
+					(
+						"cbr",
+						match bitrate_type {
+							config::BitrateType::Vbr => &false,
+							config::BitrateType::Cbr => &true,
+						},
+					),
+				],
+			)?;
+			encoder.set_property_from_str("target", "bitrate");
+
+			dest_elems.push(encoder);
+			dest_elems.push(gmake("id3v2mux", &[])?);
+		}
+
+		Transcode::CopyAudio { extension } => {
+			let muxer = match extension {
+				AudioExtension::M4a => "mp4mux",
+				AudioExtension::Mka => "matroskamux",
+				AudioExtension::Ogg | AudioExtension::Opus => "oggmux",
+				AudioExtension::Webm => "webmmux",
+				// mp3 and flac need no container, these elements only write the tags
+				AudioExtension::Mp3 => "id3v2mux",
+				AudioExtension::Flac => "flactag",
+			};
+			dest_elems.push(gmake(muxer, &[])?);
+		}
+
+		Transcode::Copy => {
+			return Err(Error::msg(
+				"`copy` copies the whole file and needs no gstreamer elements",
+			));
+		}
+	}
+
+	Ok(dest_elems)
+}
+
 pub async fn transcode_gstreamer(
 	from_path: &Path,
 	to_path: &Path,
@@ -139,102 +243,7 @@ pub async fn transcode_gstreamer(
 				return Ok(());
 			}
 
-			let mut dest_elems = Vec::new();
-
-			if !matches!(transcode, Transcode::CopyAudio { .. }) {
-				dest_elems.push(gmake(
-					"audioresample",
-					&[
-						// quality from 0 to 10
-						("quality", &10i32),
-					],
-				)?);
-				// `audioconvert` converts audio format, bitdepth, ...
-				dest_elems.push(gmake("audioconvert", &[])?);
-			}
-
-			match &transcode {
-				Transcode::Opus {
-					bitrate,
-					bitrate_type,
-				} => {
-					let encoder: Element = gmake(
-						"opusenc",
-						&[(
-							"bitrate",
-							&i32::from(*bitrate)
-								.checked_mul(1_000)
-								.context("Bitrate overflowed")?,
-						)],
-					)?;
-					// enum properties can't be set from a plain string value, they need to be
-					// parsed from their nick
-					encoder.set_property_from_str(
-						"bitrate-type",
-						match bitrate_type {
-							config::BitrateType::Vbr => "vbr",
-							config::BitrateType::Cbr => "cbr",
-						},
-					);
-
-					dest_elems.push(encoder);
-					dest_elems.push(gmake("oggmux", &[])?);
-				}
-
-				Transcode::Flac { compression } => {
-					if *compression > 9 {
-						return Err(Error::msg(format!(
-							"Invalid flac compression {}, must be between 0 and 9",
-							compression
-						)));
-					}
-
-					let encoder: Element = gmake("flacenc", &[])?;
-					encoder.set_property_from_str("quality", &compression.to_string());
-					dest_elems.push(encoder);
-				}
-
-				Transcode::Mp3 {
-					bitrate,
-					bitrate_type,
-				} => {
-					let encoder: Element = gmake(
-						"lamemp3enc",
-						&[
-							("bitrate", &i32::from(*bitrate)),
-							(
-								"cbr",
-								match bitrate_type {
-									config::BitrateType::Vbr => &false,
-									config::BitrateType::Cbr => &true,
-								},
-							),
-						],
-					)?;
-					encoder.set_property_from_str("target", "bitrate");
-
-					dest_elems.push(encoder);
-					dest_elems.push(gmake("id3v2mux", &[])?);
-				}
-
-				Transcode::CopyAudio { extension } => {
-					let muxer = match extension {
-						AudioExtension::M4a => "mp4mux",
-						AudioExtension::Mka => "matroskamux",
-						AudioExtension::Ogg | AudioExtension::Opus => "oggmux",
-						AudioExtension::Webm => "webmmux",
-						// mp3 and flac need no container, these elements only write the tags
-						AudioExtension::Mp3 => "id3v2mux",
-						AudioExtension::Flac => "flactag",
-					};
-					dest_elems.push(gmake(muxer, &[])?);
-				}
-
-				Transcode::Copy => {
-					// already handled outside this fn
-					unreachable!();
-				}
-			};
+			let mut dest_elems = dest_elements(&transcode)?;
 
 			let file_dest: gstreamer_base::BaseSink =
 				gmake("filesink", &[("location", &to_path_clone)])?;

@@ -1,6 +1,8 @@
 mod error;
 mod gstreamer;
 
+pub use gstreamer::dest_elements;
+
 use crate::{
 	config::{Config, Transcode},
 	scan::ConversionArgs,
