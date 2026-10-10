@@ -1,6 +1,6 @@
 use crate::{
 	context::{Context, DeleteMode, Transcode},
-	scan::{ConversionArgs, find_transcode},
+	scan::{Scan, find_transcode},
 };
 use ::anyhow::{Context as _, Error, Result};
 use ::std::{
@@ -23,12 +23,12 @@ pub struct Deleted {
 
 /// Logs or deletes (with `--force`) the files in `to` that don't belong to a file in `from`,
 /// `None` without `--delete`.
-pub fn run(ctx: &Context) -> Result<Option<Deleted>> {
+pub fn run(ctx: &Context, scan: &Scan) -> Result<Option<Deleted>> {
 	let Some(delete) = ctx.delete else {
 		return Ok(None);
 	};
 
-	let orphans = find_orphans(ctx, delete.mode)?;
+	let orphans = find_orphans(ctx, scan, delete.mode)?;
 
 	let mut failed = 0;
 
@@ -67,9 +67,10 @@ pub fn run(ctx: &Context) -> Result<Option<Deleted>> {
 /// Files in `to` that don't belong to a matching file in `from`, sorted. The config and log file
 /// are never returned.
 ///
-/// Fails instead of returning a possibly too long list: if reading `from` or `to` fails, if no
-/// file in `from` matches (e.g. an unmounted drive) and if `from` and `to` overlap.
-pub fn find_orphans(ctx: &Context, mode: DeleteMode) -> Result<Vec<PathBuf>> {
+/// Fails instead of returning a possibly too long list: if `scan` couldn't read all of `from`,
+/// if reading `to` fails, if no file in `from` matches (e.g. an unmounted drive) and if `from`
+/// and `to` overlap.
+pub fn find_orphans(ctx: &Context, scan: &Scan, mode: DeleteMode) -> Result<Vec<PathBuf>> {
 	if ctx.to.starts_with(&ctx.from) || ctx.from.starts_with(&ctx.to) {
 		return Err(Error::msg(format!(
 			"\"from\" ({}) and \"to\" ({}) overlap",
@@ -78,28 +79,26 @@ pub fn find_orphans(ctx: &Context, mode: DeleteMode) -> Result<Vec<PathBuf>> {
 		)));
 	}
 
-	let mut targets = HashSet::new();
-	for entry in walkdir::WalkDir::new(&ctx.from) {
-		let entry = entry.context("Failed reading the \"from\" directory")?;
-		if !entry.file_type().is_file() {
-			continue;
-		}
-		let Some(transcode) = find_transcode(&ctx.matches, entry.path()) else {
-			continue;
-		};
-		let args = ConversionArgs {
-			rel_from_path: entry.path().strip_prefix(&ctx.from)?.to_path_buf(),
-			transcode: transcode.clone(),
-		};
-		targets.insert(args.to_path(&ctx.to));
+	if scan.errors > 0 {
+		return Err(Error::msg(format!(
+			"Parts of {} couldn't be read ({} errors), see the log file",
+			ctx.from.display(),
+			scan.errors
+		)));
 	}
 
-	if targets.is_empty() {
+	if scan.files.is_empty() {
 		return Err(Error::msg(format!(
 			"No matching files found in {}, is it mounted?",
 			ctx.from.display()
 		)));
 	}
+
+	let targets: HashSet<PathBuf> = scan
+		.files
+		.iter()
+		.map(|args| args.to_path(&ctx.to))
+		.collect();
 
 	// compared by their parent dir, as the files in `to` are found below the canonical `to`
 	let keep: HashSet<PathBuf> = [ctx.config_path.as_path(), ctx.log.path()]

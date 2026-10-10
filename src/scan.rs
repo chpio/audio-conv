@@ -18,58 +18,82 @@ impl ConversionArgs {
 	}
 }
 
-pub fn get_conversion_args(ctx: &Context) -> impl Iterator<Item = Result<ConversionArgs>> + '_ {
-	walkdir::WalkDir::new(&ctx.from)
-		.into_iter()
-		.filter_map(|e| e.ok())
-		.filter(|e| e.file_type().is_file())
-		.map(move |e| -> Result<Option<ConversionArgs>> {
-			let transcode = if let Some(transcode) = find_transcode(&ctx.matches, e.path()) {
-				transcode.clone()
-			} else {
-				return Ok(None);
-			};
+/// Result of walking `from` once, shared by the conversion (`jobs`) and `--delete`.
+#[derive(Debug)]
+pub struct Scan {
+	/// Every matching file, whether it needs a conversion or not.
+	pub files: Vec<ConversionArgs>,
+	/// Entries in `from` that couldn't be read, they are logged and skipped.
+	pub errors: usize,
+}
 
-			let rel_path = e.path().strip_prefix(&ctx.from).with_context(|| {
-				format!(
-					"Unable to get relative path for {} from {}",
-					e.path().display(),
-					ctx.from.display()
-				)
-			})?;
+/// Finds the matching files in `from`, doesn't touch `to`.
+pub fn walk(ctx: &Context) -> Result<Scan> {
+	let mut scan = Scan {
+		files: Vec::new(),
+		errors: 0,
+	};
 
-			let args = ConversionArgs {
-				rel_from_path: rel_path.to_path_buf(),
-				transcode,
-			};
-			let to = args.to_path(&ctx.to);
+	for entry in walkdir::WalkDir::new(&ctx.from) {
+		let entry = match entry {
+			Ok(entry) => entry,
+			Err(err) => {
+				scan.errors += 1;
+				let err = Error::new(err).context("Skipped an unreadable entry in \"from\"");
+				ctx.log.write(format_args!("{:?}", err))?;
+				continue;
+			}
+		};
 
-			let is_newer = {
-				let from_mtime = e
-					.metadata()
-					.map_err(Error::new)
-					.and_then(|md| md.modified().map_err(Error::new))
-					.with_context(|| {
-						format!(
-							"Unable to get mtime for \"from\" file {}",
-							e.path().display()
-						)
-					})?;
-				let to_mtime = to.metadata().and_then(|md| md.modified());
-				match to_mtime {
-					Ok(to_mtime) => to_mtime < from_mtime,
-					Err(err) if err.kind() == std::io::ErrorKind::NotFound => true,
-					Err(err) => {
-						return Err(err).with_context(|| {
-							format!("Unable to get mtime for \"to\" file {}", to.display())
-						});
-					}
-				}
-			};
+		if !entry.file_type().is_file() {
+			continue;
+		}
+		let Some(transcode) = find_transcode(&ctx.matches, entry.path()) else {
+			continue;
+		};
 
-			Ok(is_newer.then_some(args))
-		})
-		.filter_map(|e| e.transpose())
+		let rel_path = entry.path().strip_prefix(&ctx.from).with_context(|| {
+			format!(
+				"Unable to get relative path for {} from {}",
+				entry.path().display(),
+				ctx.from.display()
+			)
+		})?;
+
+		scan.files.push(ConversionArgs {
+			rel_from_path: rel_path.to_path_buf(),
+			transcode: transcode.clone(),
+		});
+	}
+
+	Ok(scan)
+}
+
+/// The scanned files whose target is missing or older than the source.
+pub fn jobs(ctx: &Context, scan: &Scan) -> Result<Vec<ConversionArgs>> {
+	let mut jobs = Vec::new();
+	for args in &scan.files {
+		if needs_conversion(ctx, args)? {
+			jobs.push(args.clone());
+		}
+	}
+	Ok(jobs)
+}
+
+fn needs_conversion(ctx: &Context, args: &ConversionArgs) -> Result<bool> {
+	let from = ctx.from.join(&args.rel_from_path);
+	let from_mtime = from
+		.metadata()
+		.and_then(|md| md.modified())
+		.with_context(|| format!("Unable to get mtime for \"from\" file {}", from.display()))?;
+
+	let to = args.to_path(&ctx.to);
+	match to.metadata().and_then(|md| md.modified()) {
+		Ok(to_mtime) => Ok(to_mtime < from_mtime),
+		Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(true),
+		Err(err) => Err(err)
+			.with_context(|| format!("Unable to get mtime for \"to\" file {}", to.display())),
+	}
 }
 
 /// Returns the transcode of the first match whose regexes match `path`.

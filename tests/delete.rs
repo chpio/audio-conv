@@ -4,12 +4,13 @@ use ::audio_conv::{
 	context::{Context, Delete, DeleteMode, TranscodeMatch, compile_matches},
 	delete::{find_orphans, remove, run},
 	log::Log,
+	scan::walk,
 };
 use ::std::{fs, path::PathBuf};
 use common::{Dirs, compile, dirs, touch};
 
 fn orphans(ctx: &Context, mode: DeleteMode) -> Vec<PathBuf> {
-	find_orphans(ctx, mode)
+	find_orphans(ctx, &walk(ctx).unwrap(), mode)
 		.unwrap()
 		.into_iter()
 		.map(|path| path.strip_prefix(&ctx.to).unwrap().to_path_buf())
@@ -77,7 +78,7 @@ fn keeps_config_and_log_file() {
 	touch(&d.ctx.config_path);
 	touch(d.ctx.log.path());
 
-	let orphans = find_orphans(&d.ctx, DeleteMode::All).unwrap();
+	let orphans = find_orphans(&d.ctx, &walk(&d.ctx).unwrap(), DeleteMode::All).unwrap();
 
 	assert!(!orphans.contains(&d.ctx.config_path));
 	assert!(!orphans.contains(&d.ctx.log.path().to_path_buf()));
@@ -89,7 +90,7 @@ fn fails_without_matching_source_files() {
 	touch(&d.ctx.from.join("cover.jpg"));
 	touch(&d.ctx.to.join("a.opus"));
 
-	assert!(find_orphans(&d.ctx, DeleteMode::All).is_err());
+	assert!(find_orphans(&d.ctx, &walk(&d.ctx).unwrap(), DeleteMode::All).is_err());
 }
 
 #[test]
@@ -97,7 +98,7 @@ fn fails_if_from_and_to_overlap() {
 	let mut d = library(compile_matches(&[]).unwrap());
 	d.ctx.to = d.ctx.from.join("album");
 
-	assert!(find_orphans(&d.ctx, DeleteMode::All).is_err());
+	assert!(find_orphans(&d.ctx, &walk(&d.ctx).unwrap(), DeleteMode::All).is_err());
 }
 
 #[test]
@@ -110,7 +111,7 @@ fn fails_if_from_is_not_fully_readable() {
 	fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000)).unwrap();
 
 	let readable = fs::read_dir(&unreadable).is_ok();
-	let res = find_orphans(&d.ctx, DeleteMode::All);
+	let res = find_orphans(&d.ctx, &walk(&d.ctx).unwrap(), DeleteMode::All);
 	fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o755)).unwrap();
 
 	// root can read it anyway
@@ -129,7 +130,7 @@ fn run_without_force_only_logs() {
 	d.ctx.delete = delete(DeleteMode::Converted, false);
 	let ctx = d.ctx;
 
-	let deleted = run(&ctx).unwrap().unwrap();
+	let deleted = run(&ctx, &walk(&ctx).unwrap()).unwrap().unwrap();
 
 	assert_eq!((deleted.files, deleted.failed), (2, 0));
 	assert!(ctx.to.join("album/b.opus").exists());
@@ -143,7 +144,7 @@ fn run_with_force_deletes_and_logs() {
 	d.ctx.delete = delete(DeleteMode::Converted, true);
 	let ctx = d.ctx;
 
-	let deleted = run(&ctx).unwrap().unwrap();
+	let deleted = run(&ctx, &walk(&ctx).unwrap()).unwrap().unwrap();
 
 	assert_eq!((deleted.files, deleted.failed), (2, 0));
 	assert!(!ctx.to.join("album/b.opus").exists());
@@ -159,7 +160,7 @@ fn run_deletes_nothing_if_the_log_file_cant_be_opened() {
 	d.ctx.log = Log::new(d.ctx.from.join("missing/audio-conv.log"));
 	let ctx = d.ctx;
 
-	assert!(run(&ctx).is_err());
+	assert!(run(&ctx, &walk(&ctx).unwrap()).is_err());
 	assert!(ctx.to.join("album/b.opus").exists());
 }
 
@@ -168,7 +169,7 @@ fn run_without_delete_does_nothing() {
 	let d = library(compile_matches(&[]).unwrap());
 	let ctx = d.ctx;
 
-	assert!(run(&ctx).unwrap().is_none());
+	assert!(run(&ctx, &walk(&ctx).unwrap()).unwrap().is_none());
 	assert!(!ctx.log.path().exists());
 }
 

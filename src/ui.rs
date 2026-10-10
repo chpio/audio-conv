@@ -55,7 +55,12 @@ struct State {
 }
 
 impl State {
-	fn new(ctx: Arc<Context>, task_len: usize, deleted: Option<Deleted>) -> Result<State> {
+	fn new(
+		ctx: Arc<Context>,
+		task_len: usize,
+		deleted: Option<Deleted>,
+		has_errored: bool,
+	) -> Result<State> {
 		let terminal = Terminal::new(CrosstermBackend::new(io::stdout()))
 			.context("Unable to create ui terminal")?;
 
@@ -66,7 +71,7 @@ impl State {
 			ended_tasks: 0,
 			running_tasks: HashMap::new(),
 			has_rendered: false,
-			has_errored: deleted.as_ref().is_some_and(|deleted| deleted.failed > 0),
+			has_errored: has_errored || deleted.as_ref().is_some_and(|deleted| deleted.failed > 0),
 			deleted,
 		})
 	}
@@ -119,7 +124,7 @@ impl State {
 
 		let task_len = self.task_len;
 
-		if task_len == 0 && self.deleted.is_none() {
+		if task_len == 0 && self.deleted.is_none() && !self.has_errored {
 			return Ok(());
 		}
 
@@ -256,13 +261,15 @@ pub fn init(
 	ctx: Arc<Context>,
 	task_len: usize,
 	deleted: Option<Deleted>,
+	// errors logged before the ui started
+	has_errored: bool,
 ) -> (MsgQueue, impl Future<Output = Result<()>>) {
 	let queue = MsgQueue::new();
 
 	let queue_clone = queue.clone();
 	let fut = async move {
 		let mut interval = interval(Duration::from_millis(UPDATE_INTERVAL_MILLIS));
-		let mut wrapped = Some((Vec::new(), State::new(ctx, task_len, deleted)?));
+		let mut wrapped = Some((Vec::new(), State::new(ctx, task_len, deleted, has_errored)?));
 
 		loop {
 			interval.tick().await;

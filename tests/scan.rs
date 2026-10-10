@@ -2,7 +2,7 @@ mod common;
 
 use ::audio_conv::{
 	context::{Context, Transcode, compile_matches},
-	scan::{ConversionArgs, find_transcode, get_conversion_args},
+	scan::{ConversionArgs, find_transcode, jobs, walk},
 };
 use ::std::{
 	fs,
@@ -16,9 +16,7 @@ fn touch(path: &Path, mtime: SystemTime) {
 }
 
 fn scan(ctx: &Context) -> Vec<ConversionArgs> {
-	let mut args = get_conversion_args(ctx)
-		.collect::<::anyhow::Result<Vec<_>>>()
-		.unwrap();
+	let mut args = jobs(ctx, &walk(ctx).unwrap()).unwrap();
 	args.sort_by(|a, b| a.rel_from_path.cmp(&b.rel_from_path));
 	args
 }
@@ -122,4 +120,40 @@ fn copy_audio_uses_configured_extension() {
 	touch(&d.ctx.to.join("video.m4a"), hours_ago(1));
 
 	assert!(scan(&d.ctx).is_empty());
+}
+
+#[test]
+fn walk_includes_up_to_date_files() {
+	let d = dirs(compile_matches(&[]).unwrap());
+	touch(&d.ctx.from.join("a.flac"), hours_ago(2));
+	touch(&d.ctx.to.join("a.opus"), hours_ago(1));
+
+	let scan = walk(&d.ctx).unwrap();
+
+	assert_eq!(rel_paths(&scan.files), [PathBuf::from("a.flac")]);
+	assert!(jobs(&d.ctx, &scan).unwrap().is_empty());
+}
+
+#[test]
+fn walk_logs_and_skips_unreadable_dirs() {
+	use ::std::os::unix::fs::PermissionsExt;
+
+	let d = dirs(compile_matches(&[]).unwrap());
+	touch(&d.ctx.from.join("a.flac"), hours_ago(1));
+	let unreadable = d.ctx.from.join("unreadable");
+	touch(&unreadable.join("b.flac"), hours_ago(1));
+	fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000)).unwrap();
+
+	let readable = fs::read_dir(&unreadable).is_ok();
+	let scan = walk(&d.ctx);
+	fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o755)).unwrap();
+
+	// root can read it anyway
+	if !readable {
+		let scan = scan.unwrap();
+		assert_eq!(scan.errors, 1);
+		assert_eq!(rel_paths(&scan.files), [PathBuf::from("a.flac")]);
+		let log = fs::read_to_string(d.ctx.log.path()).unwrap();
+		assert!(log.contains("unreadable"));
+	}
 }

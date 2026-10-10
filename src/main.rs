@@ -9,22 +9,36 @@ use ::tokio::task;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-	let (ctx, conv_args) = task::spawn_blocking(init)
+	let (ctx, scan) = task::spawn_blocking(init)
 		.await
 		.context("Init task failed")??;
 	let ctx = Arc::new(ctx);
+	let scan = Arc::new(scan);
 
-	let deleted = task::spawn_blocking({
-		let ctx = ctx.clone();
-		move || delete::run(&ctx)
+	// independent: the jobs only check the targets of the scanned files, `--delete` only touches
+	// the other files in `to`, and converting only starts after both
+	let jobs = task::spawn_blocking({
+		let (ctx, scan) = (ctx.clone(), scan.clone());
+		move || scan::jobs(&ctx, &scan)
 	})
-	.await
-	.context("Delete task failed")?
-	.context("Not deleting any files")?;
+	.map(|res| {
+		res.context("Jobs task failed")?
+			.context("Failed loading dir structure")
+	});
+	let deleted = task::spawn_blocking({
+		let (ctx, scan) = (ctx.clone(), scan.clone());
+		move || delete::run(&ctx, &scan)
+	})
+	.map(|res| {
+		res.context("Delete task failed")?
+			.context("Not deleting any files")
+	});
+	let (conv_args, deleted) = future::try_join(jobs, deleted).await?;
 
 	task::LocalSet::new()
 		.run_until(async move {
-			let (ui_queue, ui_fut) = ui::init(ctx.clone(), conv_args.len(), deleted);
+			let (ui_queue, ui_fut) =
+				ui::init(ctx.clone(), conv_args.len(), deleted, scan.errors > 0);
 
 			let main_handle = async move {
 				task::spawn_local(main_loop(ctx, conv_args, ui_queue))
@@ -48,18 +62,16 @@ async fn main() -> Result<()> {
 }
 
 /// Loads the config, initializes GStreamer and scans `from`.
-fn init() -> Result<(Context, Vec<scan::ConversionArgs>)> {
+fn init() -> Result<(Context, scan::Scan)> {
 	let ctx = context::load().context("Could not get the config")?;
 
 	gstreamer::init()?;
 	gstreamer::tags::register::<tag::MbArtistId>();
 	gstreamer::tags::register::<tag::MbAlbumArtistId>();
 
-	let conv_args = scan::get_conversion_args(&ctx)
-		.collect::<Result<Vec<_>>>()
-		.context("Failed loading dir structure")?;
+	let scan = scan::walk(&ctx).context("Failed loading dir structure")?;
 
-	Ok((ctx, conv_args))
+	Ok((ctx, scan))
 }
 
 async fn main_loop(

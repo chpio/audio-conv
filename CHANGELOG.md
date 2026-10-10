@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* log the directories in "from" that can't be read instead of skipping them silently
+
 ## 1.5.0
 
 * add `--delete` to log the files in "to" that don't belong to a file in "from", and `--force`
