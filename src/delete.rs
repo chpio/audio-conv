@@ -1,13 +1,14 @@
 use crate::{
 	config::{Config, DeleteMode, Transcode},
+	context::Context,
 	scan::{ConversionArgs, find_transcode},
 };
-use ::anyhow::{Context, Error, Result};
+use ::anyhow::{Context as _, Error, Result};
 use ::std::{
 	collections::HashSet,
 	ffi::OsStr,
 	fs,
-	io::{ErrorKind, Write as _},
+	io::ErrorKind,
 	path::{Path, PathBuf},
 };
 
@@ -23,7 +24,8 @@ pub struct Deleted {
 
 /// Logs or deletes (with `--force`) the files in `to` that don't belong to a file in `from`,
 /// `None` without `--delete`.
-pub fn run(config: &Config) -> Result<Option<Deleted>> {
+pub fn run(ctx: &Context) -> Result<Option<Deleted>> {
+	let config = &ctx.config;
 	let Some(delete) = config.delete else {
 		return Ok(None);
 	};
@@ -33,30 +35,27 @@ pub fn run(config: &Config) -> Result<Option<Deleted>> {
 	let mut failed = 0;
 
 	if !orphans.is_empty() {
-		// opened before deleting anything and written line by line, so every deleted file is
-		// logged, even if the run is interrupted
-		let mut log_file = fs::OpenOptions::new()
-			.create(true)
-			.append(true)
-			.open(&config.log_path)
-			.with_context(|| format!("Unable to open log file {}", config.log_path.display()))?;
+		// written before deleting anything and line by line, so every deleted file is logged,
+		// even if the run is interrupted
+		ctx.log.write(match delete.force {
+			true => "Deleting files without a source file:",
+			false => "Files without a source file, use --force to delete them:",
+		})?;
 
 		for path in &orphans {
-			let written = if !delete.force {
-				writeln!(log_file, "Would delete {}", path.display())
-			} else {
-				match remove(&config.to, path) {
-					Ok(()) => writeln!(log_file, "Deleted {}", path.display()),
-					Err(err) => {
-						failed += 1;
-						writeln!(log_file, "{:?}", err)
-					}
+			if !delete.force {
+				ctx.log
+					.write(format_args!("Would delete {}", path.display()))?;
+				continue;
+			}
+			// stops deleting files that couldn't be logged
+			match remove(&config.to, path) {
+				Ok(()) => ctx.log.write(format_args!("Deleted {}", path.display()))?,
+				Err(err) => {
+					failed += 1;
+					ctx.log.write(format_args!("{:?}", err))?;
 				}
-			};
-			// stop deleting files that couldn't be logged
-			written.with_context(|| {
-				format!("Unable to write to log file {}", config.log_path.display())
-			})?;
+			}
 		}
 	}
 

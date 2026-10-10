@@ -1,5 +1,5 @@
-use crate::{config::Config, delete::Deleted, scan::ConversionArgs};
-use ::anyhow::{Context, Result};
+use crate::{context::Context, delete::Deleted, scan::ConversionArgs};
+use ::anyhow::{Context as _, Result};
 use ::futures::Future;
 use ::ratatui::{
 	Terminal,
@@ -45,7 +45,7 @@ impl MsgQueue {
 
 struct State {
 	terminal: Terminal<CrosstermBackend<io::Stdout>>,
-	config: Arc<Config>,
+	ctx: Arc<Context>,
 	task_len: usize,
 	ended_tasks: usize,
 	running_tasks: HashMap<usize, Task>,
@@ -55,13 +55,13 @@ struct State {
 }
 
 impl State {
-	fn new(config: Arc<Config>, task_len: usize, deleted: Option<Deleted>) -> Result<State> {
+	fn new(ctx: Arc<Context>, task_len: usize, deleted: Option<Deleted>) -> Result<State> {
 		let terminal = Terminal::new(CrosstermBackend::new(io::stdout()))
 			.context("Unable to create ui terminal")?;
 
 		Ok(State {
 			terminal,
-			config,
+			ctx,
 			task_len,
 			ended_tasks: 0,
 			running_tasks: HashMap::new(),
@@ -138,7 +138,7 @@ impl State {
 			self.has_rendered = true;
 		}
 
-		let logged_to = format!(" and were logged to {}", self.config.log_path.display());
+		let logged_to = format!(" and were logged to {}", self.ctx.log.path().display());
 
 		let mut status = Vec::new();
 
@@ -253,7 +253,7 @@ struct Task {
 }
 
 pub fn init(
-	config: Arc<Config>,
+	ctx: Arc<Context>,
 	task_len: usize,
 	deleted: Option<Deleted>,
 ) -> (MsgQueue, impl Future<Output = Result<()>>) {
@@ -262,7 +262,7 @@ pub fn init(
 	let queue_clone = queue.clone();
 	let fut = async move {
 		let mut interval = interval(Duration::from_millis(UPDATE_INTERVAL_MILLIS));
-		let mut wrapped = Some((Vec::new(), State::new(config, task_len, deleted)?));
+		let mut wrapped = Some((Vec::new(), State::new(ctx, task_len, deleted)?));
 
 		loop {
 			interval.tick().await;

@@ -1,19 +1,19 @@
-use ::anyhow::{Context, Result};
-use ::audio_conv::{config, delete, scan, tag, transcode, ui};
+use ::anyhow::{Context as _, Result};
+use ::audio_conv::{config, context::Context, delete, scan, tag, transcode, ui};
 use ::futures::prelude::*;
-use ::std::{fmt::Write as FmtWrite, sync::Arc};
-use ::tokio::{fs, io::AsyncWriteExt, task};
+use ::std::sync::Arc;
+use ::tokio::task;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
 	let (config, conv_args) = task::spawn_blocking(init)
 		.await
 		.context("Init task failed")??;
-	let config = Arc::new(config);
+	let ctx = Arc::new(Context::new(config));
 
 	let deleted = task::spawn_blocking({
-		let config = config.clone();
-		move || delete::run(&config)
+		let ctx = ctx.clone();
+		move || delete::run(&ctx)
 	})
 	.await
 	.context("Delete task failed")?
@@ -21,10 +21,10 @@ async fn main() -> Result<()> {
 
 	task::LocalSet::new()
 		.run_until(async move {
-			let (ui_queue, ui_fut) = ui::init(config.clone(), conv_args.len(), deleted);
+			let (ui_queue, ui_fut) = ui::init(ctx.clone(), conv_args.len(), deleted);
 
 			let main_handle = async move {
-				task::spawn_local(main_loop(config, conv_args, ui_queue))
+				task::spawn_local(main_loop(ctx, conv_args, ui_queue))
 					.await
 					.context("Main task failed")??;
 				Result::<_>::Ok(())
@@ -60,11 +60,11 @@ fn init() -> Result<(config::Config, Vec<scan::ConversionArgs>)> {
 }
 
 async fn main_loop(
-	config: Arc<config::Config>,
+	ctx: Arc<Context>,
 	conv_args: Vec<scan::ConversionArgs>,
 	ui_queue: ui::MsgQueue,
 ) -> Result<()> {
-	let concurrent_jobs = match config.jobs {
+	let concurrent_jobs = match ctx.config.jobs {
 		Some(jobs) => jobs,
 		None => std::thread::available_parallelism()
 			.context("Could not get the number of logical cores, use \"jobs\" to set it")?
@@ -74,7 +74,7 @@ async fn main_loop(
 	stream::iter(conv_args.into_iter().enumerate())
 		.map(Ok)
 		.try_for_each_concurrent(concurrent_jobs, |(i, args)| {
-			let config = &config;
+			let ctx = &ctx;
 			let ui_queue = &ui_queue;
 
 			async move {
@@ -83,7 +83,7 @@ async fn main_loop(
 					args: args.clone(),
 				});
 
-				match transcode::transcode(config, &args, i, ui_queue).await {
+				match transcode::transcode(&ctx.config, &args, i, ui_queue).await {
 					Ok(()) => ui_queue.push(ui::Msg::TaskEnd { id: i }),
 					Err(err) => {
 						let err = err.context(format!(
@@ -91,37 +91,10 @@ async fn main_loop(
 							args.rel_from_path.display()
 						));
 
-						let mut log_file = match fs::OpenOptions::new()
-							.create(true)
-							.append(true)
-							.open(&config.log_path)
-							.await
-						{
-							Ok(log_file) => log_file,
-							Err(fs_err) => {
-								let err = err.context(fs_err).context("Unable to open log file");
-								return Err(err);
-							}
-						};
-
-						let mut err_str = String::new();
-						if let Err(write_err) = writeln!(&mut err_str, "{:?}", err) {
-							let err = err.context(format!(
-								"Unable to format transcoding error for logging (write error: {})",
-								write_err
-							));
-							return Err(err);
+						// a single short write, fine to block on
+						if let Err(log_err) = ctx.log.write(format_args!("{:?}", err)) {
+							return Err(err.context(format!("{:#}", log_err)));
 						}
-
-						log_file
-							.write_all(err_str.as_ref())
-							.await
-							.map_err(|fs_err| {
-								err.context(format!(
-									"Unable to write transcoding error to log file (fs error: {})",
-									fs_err
-								))
-							})?;
 
 						ui_queue.push(ui::Msg::TaskError { id: i });
 					}

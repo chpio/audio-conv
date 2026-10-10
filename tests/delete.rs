@@ -1,5 +1,6 @@
 use ::audio_conv::{
 	config::{Config, Delete, DeleteMode, TranscodeMatch, TranscodeMatchFile, compile_matches},
+	context::Context,
 	delete::{find_orphans, remove, run},
 };
 use ::std::{
@@ -164,12 +165,13 @@ fn delete(mode: DeleteMode, force: bool) -> Option<Delete> {
 fn run_without_force_only_logs() {
 	let mut d = library(compile_matches(&[]).unwrap());
 	d.config.delete = delete(DeleteMode::Converted, false);
+	let ctx = Context::new(d.config);
 
-	let deleted = run(&d.config).unwrap().unwrap();
+	let deleted = run(&ctx).unwrap().unwrap();
 
 	assert_eq!((deleted.files, deleted.failed), (2, 0));
-	assert!(d.config.to.join("album/b.opus").exists());
-	let log = fs::read_to_string(&d.config.log_path).unwrap();
+	assert!(ctx.config.to.join("album/b.opus").exists());
+	let log = fs::read_to_string(ctx.log.path()).unwrap();
 	assert!(log.contains("Would delete") && log.contains("b.opus") && log.contains("c.tmp"));
 }
 
@@ -177,13 +179,14 @@ fn run_without_force_only_logs() {
 fn run_with_force_deletes_and_logs() {
 	let mut d = library(compile_matches(&[]).unwrap());
 	d.config.delete = delete(DeleteMode::Converted, true);
+	let ctx = Context::new(d.config);
 
-	let deleted = run(&d.config).unwrap().unwrap();
+	let deleted = run(&ctx).unwrap().unwrap();
 
 	assert_eq!((deleted.files, deleted.failed), (2, 0));
-	assert!(!d.config.to.join("album/b.opus").exists());
-	assert!(d.config.to.join("album/a.opus").exists());
-	let log = fs::read_to_string(&d.config.log_path).unwrap();
+	assert!(!ctx.config.to.join("album/b.opus").exists());
+	assert!(ctx.config.to.join("album/a.opus").exists());
+	let log = fs::read_to_string(ctx.log.path()).unwrap();
 	assert!(log.contains("Deleted") && log.contains("b.opus") && log.contains("c.tmp"));
 }
 
@@ -192,17 +195,19 @@ fn run_deletes_nothing_if_the_log_file_cant_be_opened() {
 	let mut d = library(compile_matches(&[]).unwrap());
 	d.config.delete = delete(DeleteMode::Converted, true);
 	d.config.log_path = d.config.from.join("missing/audio-conv.log");
+	let ctx = Context::new(d.config);
 
-	assert!(run(&d.config).is_err());
-	assert!(d.config.to.join("album/b.opus").exists());
+	assert!(run(&ctx).is_err());
+	assert!(ctx.config.to.join("album/b.opus").exists());
 }
 
 #[test]
 fn run_without_delete_does_nothing() {
 	let d = library(compile_matches(&[]).unwrap());
+	let ctx = Context::new(d.config);
 
-	assert!(run(&d.config).unwrap().is_none());
-	assert!(!d.config.log_path.exists());
+	assert!(run(&ctx).unwrap().is_none());
+	assert!(!ctx.log.path().exists());
 }
 
 #[test]
