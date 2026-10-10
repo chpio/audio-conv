@@ -2,7 +2,8 @@ use ::anyhow::{Context, Error, Result};
 use ::clap::{ArgAction, builder::ValueParser};
 use ::globset::GlobBuilder;
 use ::regex::bytes::{Regex, RegexBuilder};
-use ::serde::Deserialize;
+use ::schemars::JsonSchema;
+use ::serde::{Deserialize, Serialize};
 use ::std::{
 	io::Write,
 	path::{Path, PathBuf},
@@ -22,39 +23,70 @@ pub struct TranscodeMatch {
 	pub to: Transcode,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+/// What the matched files are converted to.
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
 #[serde(tag = "codec")]
+#[schemars(deny_unknown_fields)]
 pub enum Transcode {
+	/// Transcodes to Opus in an Ogg container (`.opus`).
 	#[serde(rename = "opus")]
 	Opus {
+		/// Bitrate in kbit/s.
 		#[serde(default = "default_opus_bitrate")]
+		#[schemars(range(min = 4, max = 650))]
 		bitrate: u16,
 
 		#[serde(default = "bitrate_type_vbr")]
 		bitrate_type: BitrateType,
 	},
 
+	/// Transcodes to FLAC (`.flac`).
 	#[serde(rename = "flac")]
 	Flac {
+		/// Effort spent for the compression, 0 (fastest) to 9 (highest compression).
 		#[serde(default = "default_flac_compression")]
+		#[schemars(range(max = 9))]
 		compression: u8,
 	},
 
+	/// Transcodes to MP3 (`.mp3`).
 	#[serde(rename = "mp3")]
+	// cbr is restricted to the bitrates of MP3 frames, other values get silently rounded up
+	#[schemars(extend(
+		"if" = {
+			"properties": { "bitrate_type": { "const": "cbr" } },
+			"required": ["bitrate_type"]
+		},
+		"then" = {
+			"properties": {
+				"bitrate": {
+					"enum": [8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320]
+				}
+			}
+		}
+	))]
 	Mp3 {
+		/// Bitrate in kbit/s. `vbr` (average bitrate) takes any value, `cbr` one of 8, 16, 24, 32,
+		/// 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256 or 320.
 		#[serde(default = "default_mp3_bitrate")]
+		#[schemars(range(min = 8, max = 320))]
 		bitrate: u16,
 
 		#[serde(default = "bitrate_type_vbr")]
 		bitrate_type: BitrateType,
 	},
 
+	/// Copies the file without transcoding it, the extension is kept.
 	#[serde(rename = "copy")]
 	Copy,
 
 	/// Copies the first audio stream without transcoding it, e.g. the audio of a video file.
 	#[serde(rename = "copy_audio")]
-	CopyAudio { extension: AudioExtension },
+	CopyAudio {
+		/// Extension and container of the target file, the audio codec of the source has to be
+		/// supported by it.
+		extension: AudioExtension,
+	},
 }
 
 impl Transcode {
@@ -71,7 +103,7 @@ impl Transcode {
 }
 
 /// Container for `copy_audio`, the audio codec of the source has to be supported by it.
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema)]
 pub enum AudioExtension {
 	/// MP4 audio, e.g. for AAC or ALAC
 	#[serde(rename = "m4a")]
@@ -88,8 +120,10 @@ pub enum AudioExtension {
 	/// WebM, for Vorbis or Opus
 	#[serde(rename = "webm")]
 	Webm,
+	/// MP3
 	#[serde(rename = "mp3")]
 	Mp3,
+	/// FLAC
 	#[serde(rename = "flac")]
 	Flac,
 }
@@ -133,34 +167,63 @@ impl Default for Transcode {
 	}
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub enum BitrateType {
+	/// Constant bitrate
 	#[serde(rename = "cbr")]
 	Cbr,
+	/// Variable bitrate
 	#[serde(rename = "vbr")]
 	Vbr,
 }
 
-#[derive(Debug, Default, Deserialize)]
+/// audio-conv config file, `audio-conv.yaml` in the current directory by default.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[schemars(title = "audio-conv config", deny_unknown_fields)]
 pub struct ConfigFile {
+	/// Directory with the source files, relative to the config file. Overridden by `--from`.
 	pub from: Option<PathBuf>,
+
+	/// Directory the converted files are written to, relative to the config file. Overridden by
+	/// `--to`.
 	pub to: Option<PathBuf>,
 
+	/// Rules which files are converted and how, the first matching rule wins. Without rules,
+	/// `.flac` and `.wav` files are transcoded to Opus with 160 kbit/s.
 	#[serde(default)]
 	pub matches: Vec<TranscodeMatchFile>,
 
+	/// Number of files converted at once, defaults to the number of logical cores. Overridden by
+	/// `--jobs`.
 	pub jobs: Option<usize>,
 }
 
-#[derive(Debug, Deserialize)]
+/// A rule matching files by `glob`, `regex` and/or `extensions` (case insensitive, a file has
+/// to match any of them). Without any of them, `.flac` and `.wav` files are matched.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct TranscodeMatchFile {
+	/// Glob matched against the absolute path of the file, e.g. `**/*.flac`.
 	pub glob: Option<String>,
+
+	/// Regular expression matched against the absolute path of the file, e.g. `\.flac$`.
 	pub regex: Option<String>,
 
+	/// File extensions without the leading dot, e.g. `flac`.
 	#[serde(default)]
 	pub extensions: Vec<String>,
 
 	pub to: Transcode,
+}
+
+/// JSON schema of the config file (`ConfigFile`), for editor support.
+pub fn json_schema() -> String {
+	let schema = ::schemars::generate::SchemaSettings::draft07()
+		.into_generator()
+		.into_root_schema_for::<ConfigFile>();
+	let mut json = serde_json::to_string_pretty(&schema).expect("Failed serializing the schema");
+	json.push('\n');
+	json
 }
 
 pub fn config() -> Result<Config> {

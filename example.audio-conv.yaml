@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://gitlab.com/chpio/audio-conv/-/raw/main/audio-conv.schema.json
+
 from: ./music
 to: ./converted_test
 matches:
