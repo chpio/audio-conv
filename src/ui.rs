@@ -278,6 +278,9 @@ pub fn init(
 
 			queue_clone.swap_inner(&mut current_queue);
 
+			// rendering writes to stdout synchronously, which can block (terminal paused with
+			// Ctrl-S, slow ssh), that must not stall `main_loop` on the single runtime thread; the
+			// state moves into the blocking task and back each tick, hence `wrapped`
 			let render_res = task::spawn_blocking(move || -> Result<_> {
 				let mut exit = false;
 				for msg in current_queue.drain(..) {
