@@ -45,30 +45,16 @@ async fn main() -> Result<()> {
 	});
 	let (conv_args, deleted) = future::try_join(jobs, deleted).await?;
 
-	task::LocalSet::new()
-		.run_until(async move {
-			let (ui_queue, ui_fut) =
-				ui::init(ctx.clone(), conv_args.len(), deleted, scan.errors > 0);
+	let (ui_queue, ui_fut) = ui::init(ctx.clone(), conv_args.len(), deleted, scan.errors > 0);
 
-			let main_handle = async move {
-				task::spawn_local(main_loop(ctx, conv_args, ui_queue))
-					.await
-					.context("Main task failed")??;
-				Result::<_>::Ok(())
-			};
+	// polled together in this task, so the `!Send` `MsgQueue` needs no `LocalSet`
+	future::try_join(
+		main_loop(ctx, conv_args, ui_queue),
+		ui_fut.map(|res| res.context("Ui failed")),
+	)
+	.await?;
 
-			let ui_handle = async move {
-				task::spawn_local(ui_fut)
-					.await
-					.context("Ui task failed")?
-					.context("Ui failed")?;
-				Result::<_>::Ok(())
-			};
-
-			future::try_join(main_handle, ui_handle).await?;
-			Ok(())
-		})
-		.await
+	Ok(())
 }
 
 async fn main_loop(
