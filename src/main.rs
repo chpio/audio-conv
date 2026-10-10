@@ -9,9 +9,19 @@ use ::tokio::task;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-	let (ctx, scan) = task::spawn_blocking(init)
-		.await
-		.context("Init task failed")??;
+	let (ctx, scan) = task::spawn_blocking(|| -> Result<_> {
+		let ctx = context::load().context("Could not get the config")?;
+
+		gstreamer::init()?;
+		gstreamer::tags::register::<tag::MbArtistId>();
+		gstreamer::tags::register::<tag::MbAlbumArtistId>();
+
+		let scan = scan::walk(&ctx).context("Failed loading dir structure")?;
+
+		Ok((ctx, scan))
+	})
+	.await
+	.context("Init task failed")??;
 	let ctx = Arc::new(ctx);
 	let scan = Arc::new(scan);
 
@@ -59,19 +69,6 @@ async fn main() -> Result<()> {
 			Ok(())
 		})
 		.await
-}
-
-/// Loads the config, initializes GStreamer and scans `from`.
-fn init() -> Result<(Context, scan::Scan)> {
-	let ctx = context::load().context("Could not get the config")?;
-
-	gstreamer::init()?;
-	gstreamer::tags::register::<tag::MbArtistId>();
-	gstreamer::tags::register::<tag::MbAlbumArtistId>();
-
-	let scan = scan::walk(&ctx).context("Failed loading dir structure")?;
-
-	Ok((ctx, scan))
 }
 
 async fn main_loop(
