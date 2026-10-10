@@ -1,13 +1,13 @@
 # yaml-language-server: $schema=https://gitlab.com/chpio/audio-conv/-/raw/main/audio-conv.schema.json
 
 from: ./music
-to: ./converted_test
+to: ./converted
 matches:
   - extensions:
       - flac
       - wav
     # and/or `glob: "**/*.flac"`
-    # and/or `regex: "\.flac$"`
+    # and/or `regex: '\.flac$'` (single quotes, YAML doesn't allow `\.` in double quotes)
     # you can also leave it empty for the default extensions
 
     to:
@@ -22,14 +22,15 @@ matches:
     # for mp3:
     # to:
     #   codec: mp3
-    #   # one of: 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256 or 320
+    #   # vbr (average bitrate) takes any value from 8 to 320, cbr one of:
+    #   # 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256 or 320
     #   bitrate: 256
     #   bitrate_type: vbr # or cbr
 
     # for flac:
     # to:
     #   codec: flac
-    #   # effort spend for the compression. 0 (fastes compression) to 9 (highest compression)
+    #   # effort spent for the compression, 0 (fastest) to 9 (highest compression), default 5
     #   compression: 8
 
   # the audio stream of video files can be transcoded too, only the first audio stream is used:

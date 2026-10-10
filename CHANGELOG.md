@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* fix the commented `regex` example in the config written by `init`, it was invalid YAML
+
 ## v1.4.0
 
 * fix transcoding to "opus", "flac" and "mp3", v1.3.2 crashed on every transcode

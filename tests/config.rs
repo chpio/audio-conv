@@ -154,7 +154,7 @@ fn example_config_is_valid() {
 		serde_yaml_ng::from_slice(include_bytes!("../example.audio-conv.yaml")).unwrap();
 
 	assert_eq!(config.from.as_deref(), Some(Path::new("./music")));
-	assert_eq!(config.to.as_deref(), Some(Path::new("./converted_test")));
+	assert_eq!(config.to.as_deref(), Some(Path::new("./converted")));
 
 	let matches = compile_matches(&config.matches).unwrap();
 	assert_eq!(matches.len(), 1);
