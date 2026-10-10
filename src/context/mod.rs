@@ -66,15 +66,20 @@ pub fn load() -> Result<Context> {
 			.unwrap_or(Path::new("audio-conv.yaml")),
 	);
 
-	if args.init {
-		std::fs::OpenOptions::new()
-			.write(true)
-			.create_new(true)
-			.open(&config_path)
-			.and_then(|mut f| f.write_all(std::include_bytes!("../../example.audio-conv.yaml")))
-			.with_context(|| format!("Unable to write config file to {}", config_path.display()))?;
+	match args.command {
+		Some(cli::Command::Init) => {
+			std::fs::OpenOptions::new()
+				.write(true)
+				.create_new(true)
+				.open(&config_path)
+				.and_then(|mut f| f.write_all(std::include_bytes!("../../example.audio-conv.yaml")))
+				.with_context(|| {
+					format!("Unable to write config file to {}", config_path.display())
+				})?;
 
-		std::process::exit(0);
+			std::process::exit(0);
+		}
+		None => {}
 	}
 
 	let config_dir = config_path

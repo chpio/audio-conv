@@ -1,5 +1,5 @@
 use super::{Delete, DeleteMode};
-use ::clap::{Arg, ArgAction, Command, builder::ValueParser};
+use ::clap::{Arg, ArgAction, builder::ValueParser};
 use ::std::path::PathBuf;
 
 /// The command line arguments, paths are as given (relative to the current directory).
@@ -10,12 +10,18 @@ pub struct Args {
 	pub to: Option<PathBuf>,
 	pub jobs: Option<usize>,
 	pub delete: Option<Delete>,
-	/// The `init` subcommand.
-	pub init: bool,
+	/// `None` converts the files.
+	pub command: Option<Command>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Command {
+	/// Writes an example config.
+	Init,
 }
 
 pub fn parse() -> Args {
-	let arg_matches = Command::new("audio-conv")
+	let arg_matches = ::clap::Command::new("audio-conv")
 		.version(clap::crate_version!())
 		.about(clap::crate_description!())
 		.arg(
@@ -82,7 +88,7 @@ pub fn parse() -> Args {
 				.help("Deletes the files found by --delete instead of only logging them"),
 		)
 		.subcommand(
-			Command::new("init")
+			::clap::Command::new("init")
 				.about("Writes an example config to audio-conv.yaml (or the --config path)"),
 		)
 		.get_matches();
@@ -99,6 +105,9 @@ pub fn parse() -> Args {
 			},
 			force: arg_matches.get_flag("force"),
 		}),
-		init: arg_matches.subcommand_name() == Some("init"),
+		command: match arg_matches.subcommand_name() {
+			Some("init") => Some(Command::Init),
+			_ => None,
+		},
 	}
 }
