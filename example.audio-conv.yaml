@@ -29,3 +29,11 @@ matches:
     #   codec: flac
     #   # effort spend for the compression. 0 (fastes compression) to 9 (highest compression)
     #   compression: 8
+
+  # the audio stream of video files can be transcoded too, only the first audio stream is used:
+  # - extensions:
+  #     - mp4
+  #     - mkv
+  #     - webm
+  #   to:
+  #     codec: opus

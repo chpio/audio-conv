@@ -5,9 +5,16 @@ use crate::{
 };
 use ::anyhow::{Context, Error, Result};
 use ::futures::{pin_mut, prelude::*};
-use ::gstreamer::{Element, element_error, prelude::*};
+use ::gstreamer::{Element, element_error, glib, prelude::*};
 use ::gstreamer_base::prelude::*;
-use ::std::{path::Path, time::Duration};
+use ::std::{
+	path::Path,
+	sync::{
+		Arc,
+		atomic::{AtomicBool, Ordering},
+	},
+	time::Duration,
+};
 use ::tokio::time::interval;
 
 fn gmake<T: IsA<Element>>(factory_name: &str, properties: &[(&str, &dyn ToValue)]) -> Result<T> {
@@ -30,6 +37,20 @@ fn gmake<T: IsA<Element>>(factory_name: &str, properties: &[(&str, &dyn ToValue)
 	Ok(res)
 }
 
+/// Posts `err` as an error message on the bus, the bus stream recovers the original `err`.
+fn post_error(element: &Element, err: Error, msg: &str) {
+	let details = gstreamer::Structure::builder("error-details")
+		.field("error", GBoxErrorWrapper::new(err))
+		.build();
+
+	element_error!(
+		element,
+		gstreamer::LibraryError::Failed,
+		("{}", msg),
+		details: details
+	);
+}
+
 pub async fn transcode_gstreamer(
 	from_path: &Path,
 	to_path: &Path,
@@ -40,6 +61,27 @@ pub async fn transcode_gstreamer(
 	let file_src: Element = gmake("filesrc", &[("location", &from_path)])?;
 
 	let decodebin: Element = gmake("decodebin", &[])?;
+
+	// expose video streams (e.g. from video files or embedded cover art) undecoded, they are
+	// ignored anyway and decoding them would only waste cpu time
+	let select_result_type = glib::Type::from_name("GstAutoplugSelectResult")
+		.context("Could not get type `GstAutoplugSelectResult`")?;
+	decodebin.connect("autoplug-select", false, move |args| {
+		let factory = args[3]
+			.get::<gstreamer::ElementFactory>()
+			.expect("autoplug-select: 4. arg is not an ElementFactory");
+		let is_video_decoder = factory.has_type(
+			gstreamer::ElementFactoryType::DECODER
+				| gstreamer::ElementFactoryType::MEDIA_VIDEO
+				| gstreamer::ElementFactoryType::MEDIA_IMAGE,
+		);
+		let result = if is_video_decoder { "expose" } else { "try" };
+		glib::EnumClass::with_type(select_result_type)
+			.and_then(|class| class.to_value_by_nick(result))
+	});
+
+	// only the first audio stream gets transcoded, all of them would write into the same file
+	let audio_linked = Arc::new(AtomicBool::new(false));
 
 	let src_elems: &[&Element] = &[&file_src, &decodebin];
 
@@ -52,6 +94,7 @@ pub async fn transcode_gstreamer(
 	let pipeline_weak = pipeline.downgrade();
 
 	let to_path_clone = to_path.to_owned();
+	let audio_linked_clone = audio_linked.clone();
 	decodebin.connect_pad_added(move |decodebin, src_pad| {
 		let insert_sink = || -> Result<()> {
 			let pipeline = match pipeline_weak.upgrade() {
@@ -80,6 +123,11 @@ pub async fn transcode_gstreamer(
 					return Ok(());
 				}
 				Some(true) => {}
+			}
+
+			if audio_linked_clone.swap(true, Ordering::SeqCst) {
+				// not the first audio pad... ignoring
+				return Ok(());
 			}
 
 			let resample: Element = gmake(
@@ -190,15 +238,16 @@ pub async fn transcode_gstreamer(
 		};
 
 		if let Err(err) = insert_sink() {
-			let details = gstreamer::Structure::builder("error-details")
-				.field("error", GBoxErrorWrapper::new(err))
-				.build();
+			post_error(decodebin, err, "Failed to insert sink");
+		}
+	});
 
-			element_error!(
+	decodebin.connect_no_more_pads(move |decodebin| {
+		if !audio_linked.load(Ordering::SeqCst) {
+			post_error(
 				decodebin,
-				gstreamer::LibraryError::Failed,
-				("Failed to insert sink"),
-				details: details
+				Error::msg("No audio stream found"),
+				"No audio stream found",
 			);
 		}
 	});
