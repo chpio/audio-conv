@@ -7,17 +7,17 @@ authors = ["Thomas Heck <t@b128.net>"]
 repository = "https://gitlab.com/chpio/audio-conv"
 license = "MIT OR Apache-2.0"
 categories = [
-    "command-line-utilities",
-    "multimedia",
-    "multimedia::audio",
-    "multimedia::encoding",
+	"command-line-utilities",
+	"multimedia",
+	"multimedia::audio",
+	"multimedia::encoding",
 ]
 keywords = ["audio", "conversion", "opus", "flac"]
 include = [
-    "/src/**/*",
-    "/example.audio-conv.yaml",
-    "/README.md",
-    "/CHANGELOG.md",
+	"/src/**/*",
+	"/example.audio-conv.yaml",
+	"/README.md",
+	"/CHANGELOG.md",
 ]
 
 [dependencies]
