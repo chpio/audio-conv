@@ -1,6 +1,6 @@
-use ::audio_conv::config::{
-	AudioExtension, BitrateType, ConfigFile, Transcode, TranscodeMatch, TranscodeMatchFile,
-	compile_matches,
+use ::audio_conv::context::{
+	AudioExtension, BitrateType, Transcode, TranscodeMatch, TranscodeMatchFile, compile_matches,
+	config_file::ConfigFile,
 };
 use ::std::path::Path;
 

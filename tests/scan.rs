@@ -1,5 +1,6 @@
 use ::audio_conv::{
-	config::{Config, Transcode, TranscodeMatch, TranscodeMatchFile, compile_matches},
+	context::{Context, Transcode, TranscodeMatch, TranscodeMatchFile, compile_matches},
+	log::Log,
 	scan::{ConversionArgs, find_transcode, get_conversion_args},
 };
 use ::std::{
@@ -16,7 +17,7 @@ fn compile(yaml: &str) -> Vec<TranscodeMatch> {
 
 struct Dirs {
 	_tmp: TempDir,
-	config: Config,
+	ctx: Context,
 }
 
 fn dirs(matches: Vec<TranscodeMatch>) -> Dirs {
@@ -24,19 +25,19 @@ fn dirs(matches: Vec<TranscodeMatch>) -> Dirs {
 	let from = tmp.path().join("from");
 	let to = tmp.path().join("to");
 	let config_path = tmp.path().join("audio-conv.yaml");
-	let log_path = tmp.path().join("audio-conv.log");
+	let log = Log::new(tmp.path().join("audio-conv.log"));
 	fs::create_dir(&from).unwrap();
 	fs::create_dir(&to).unwrap();
 	Dirs {
 		_tmp: tmp,
-		config: Config {
+		ctx: Context {
 			config_path,
-			log_path,
 			from,
 			to,
 			matches,
 			jobs: None,
 			delete: None,
+			log,
 		},
 	}
 }
@@ -46,8 +47,8 @@ fn touch(path: &Path, mtime: SystemTime) {
 	File::create(path).unwrap().set_modified(mtime).unwrap();
 }
 
-fn scan(config: &Config) -> Vec<ConversionArgs> {
-	let mut args = get_conversion_args(config)
+fn scan(ctx: &Context) -> Vec<ConversionArgs> {
+	let mut args = get_conversion_args(ctx)
 		.collect::<::anyhow::Result<Vec<_>>>()
 		.unwrap();
 	args.sort_by(|a, b| a.rel_from_path.cmp(&b.rel_from_path));
@@ -82,13 +83,13 @@ fn first_match_wins() {
 #[test]
 fn finds_matching_files_recursively() {
 	let d = dirs(compile_matches(&[]).unwrap());
-	let from = &d.config.from;
+	let from = &d.ctx.from;
 	touch(&from.join("a.flac"), hours_ago(1));
 	touch(&from.join("artist/album/b.WAV"), hours_ago(1));
 	touch(&from.join("artist/album/cover.jpg"), hours_ago(1));
 	fs::create_dir(from.join("empty.flac")).unwrap();
 
-	let args = scan(&d.config);
+	let args = scan(&d.ctx);
 
 	assert_eq!(
 		rel_paths(&args),
@@ -103,42 +104,42 @@ fn finds_matching_files_recursively() {
 #[test]
 fn skips_targets_newer_than_source() {
 	let d = dirs(compile_matches(&[]).unwrap());
-	touch(&d.config.from.join("a.flac"), hours_ago(2));
-	touch(&d.config.to.join("a.opus"), hours_ago(1));
+	touch(&d.ctx.from.join("a.flac"), hours_ago(2));
+	touch(&d.ctx.to.join("a.opus"), hours_ago(1));
 
-	assert!(scan(&d.config).is_empty());
+	assert!(scan(&d.ctx).is_empty());
 }
 
 #[test]
 fn includes_targets_older_than_source() {
 	let d = dirs(compile_matches(&[]).unwrap());
-	touch(&d.config.from.join("a.flac"), hours_ago(1));
-	touch(&d.config.to.join("a.opus"), hours_ago(2));
+	touch(&d.ctx.from.join("a.flac"), hours_ago(1));
+	touch(&d.ctx.to.join("a.opus"), hours_ago(2));
 
-	assert_eq!(rel_paths(&scan(&d.config)), [PathBuf::from("a.flac")]);
+	assert_eq!(rel_paths(&scan(&d.ctx)), [PathBuf::from("a.flac")]);
 }
 
 #[test]
 fn target_extension_depends_on_codec() {
 	let d = dirs(compile("[{extensions: [flac], to: {codec: mp3}}]"));
-	touch(&d.config.from.join("a.flac"), hours_ago(2));
+	touch(&d.ctx.from.join("a.flac"), hours_ago(2));
 	// a target with the extension of a different codec doesn't count
-	touch(&d.config.to.join("a.opus"), hours_ago(1));
+	touch(&d.ctx.to.join("a.opus"), hours_ago(1));
 
-	assert_eq!(rel_paths(&scan(&d.config)), [PathBuf::from("a.flac")]);
+	assert_eq!(rel_paths(&scan(&d.ctx)), [PathBuf::from("a.flac")]);
 
-	touch(&d.config.to.join("a.mp3"), hours_ago(1));
+	touch(&d.ctx.to.join("a.mp3"), hours_ago(1));
 
-	assert!(scan(&d.config).is_empty());
+	assert!(scan(&d.ctx).is_empty());
 }
 
 #[test]
 fn copy_keeps_extension() {
 	let d = dirs(compile("[{extensions: [jpg], to: {codec: copy}}]"));
-	touch(&d.config.from.join("cover.jpg"), hours_ago(2));
-	touch(&d.config.to.join("cover.jpg"), hours_ago(1));
+	touch(&d.ctx.from.join("cover.jpg"), hours_ago(2));
+	touch(&d.ctx.to.join("cover.jpg"), hours_ago(1));
 
-	assert!(scan(&d.config).is_empty());
+	assert!(scan(&d.ctx).is_empty());
 }
 
 #[test]
@@ -146,11 +147,11 @@ fn copy_audio_uses_configured_extension() {
 	let d = dirs(compile(
 		"[{extensions: [mkv], to: {codec: copy_audio, extension: m4a}}]",
 	));
-	touch(&d.config.from.join("video.mkv"), hours_ago(2));
+	touch(&d.ctx.from.join("video.mkv"), hours_ago(2));
 
-	assert_eq!(rel_paths(&scan(&d.config)), [PathBuf::from("video.mkv")]);
+	assert_eq!(rel_paths(&scan(&d.ctx)), [PathBuf::from("video.mkv")]);
 
-	touch(&d.config.to.join("video.m4a"), hours_ago(1));
+	touch(&d.ctx.to.join("video.m4a"), hours_ago(1));
 
-	assert!(scan(&d.config).is_empty());
+	assert!(scan(&d.ctx).is_empty());
 }

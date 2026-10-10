@@ -1,15 +1,18 @@
 use ::anyhow::{Context as _, Result};
-use ::audio_conv::{config, context::Context, delete, scan, tag, transcode, ui};
+use ::audio_conv::{
+	context::{self, Context},
+	delete, scan, tag, transcode, ui,
+};
 use ::futures::prelude::*;
 use ::std::sync::Arc;
 use ::tokio::task;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-	let (config, conv_args) = task::spawn_blocking(init)
+	let (ctx, conv_args) = task::spawn_blocking(init)
 		.await
 		.context("Init task failed")??;
-	let ctx = Arc::new(Context::new(config));
+	let ctx = Arc::new(ctx);
 
 	let deleted = task::spawn_blocking({
 		let ctx = ctx.clone();
@@ -45,18 +48,18 @@ async fn main() -> Result<()> {
 }
 
 /// Loads the config, initializes GStreamer and scans `from`.
-fn init() -> Result<(config::Config, Vec<scan::ConversionArgs>)> {
-	let config = config::config().context("Could not get the config")?;
+fn init() -> Result<(Context, Vec<scan::ConversionArgs>)> {
+	let ctx = context::load().context("Could not get the config")?;
 
 	gstreamer::init()?;
 	gstreamer::tags::register::<tag::MbArtistId>();
 	gstreamer::tags::register::<tag::MbAlbumArtistId>();
 
-	let conv_args = scan::get_conversion_args(&config)
+	let conv_args = scan::get_conversion_args(&ctx)
 		.collect::<Result<Vec<_>>>()
 		.context("Failed loading dir structure")?;
 
-	Ok((config, conv_args))
+	Ok((ctx, conv_args))
 }
 
 async fn main_loop(
@@ -64,7 +67,7 @@ async fn main_loop(
 	conv_args: Vec<scan::ConversionArgs>,
 	ui_queue: ui::MsgQueue,
 ) -> Result<()> {
-	let concurrent_jobs = match ctx.config.jobs {
+	let concurrent_jobs = match ctx.jobs {
 		Some(jobs) => jobs,
 		None => std::thread::available_parallelism()
 			.context("Could not get the number of logical cores, use \"jobs\" to set it")?
@@ -83,7 +86,7 @@ async fn main_loop(
 					args: args.clone(),
 				});
 
-				match transcode::transcode(&ctx.config, &args, i, ui_queue).await {
+				match transcode::transcode(ctx, &args, i, ui_queue).await {
 					Ok(()) => ui_queue.push(ui::Msg::TaskEnd { id: i }),
 					Err(err) => {
 						let err = err.context(format!(

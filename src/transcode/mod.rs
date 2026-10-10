@@ -4,22 +4,22 @@ mod gstreamer;
 pub use gstreamer::dest_elements;
 
 use crate::{
-	config::{Config, Transcode},
+	context::{Context, Transcode},
 	scan::ConversionArgs,
 	ui,
 };
-use ::anyhow::{Context, Result};
+use ::anyhow::{Context as _, Result};
 use ::std::path::Path;
 use ::tokio::fs;
 
 pub async fn transcode(
-	config: &Config,
+	ctx: &Context,
 	args: &ConversionArgs,
 	task_id: usize,
 	queue: &ui::MsgQueue,
 ) -> Result<()> {
-	let from_path = config.from.join(&args.rel_from_path);
-	let to_path = args.to_path(&config.to);
+	let from_path = ctx.from.join(&args.rel_from_path);
+	let to_path = args.to_path(&ctx.to);
 
 	fs::create_dir_all(
 		to_path

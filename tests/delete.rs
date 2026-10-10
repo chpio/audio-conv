@@ -1,7 +1,7 @@
 use ::audio_conv::{
-	config::{Config, Delete, DeleteMode, TranscodeMatch, TranscodeMatchFile, compile_matches},
-	context::Context,
+	context::{Context, Delete, DeleteMode, TranscodeMatch, TranscodeMatchFile, compile_matches},
 	delete::{find_orphans, remove, run},
+	log::Log,
 };
 use ::std::{
 	fs::{self, File},
@@ -16,7 +16,7 @@ fn compile(yaml: &str) -> Vec<TranscodeMatch> {
 
 struct Dirs {
 	_tmp: TempDir,
-	config: Config,
+	ctx: Context,
 }
 
 fn dirs(matches: Vec<TranscodeMatch>) -> Dirs {
@@ -29,14 +29,14 @@ fn dirs(matches: Vec<TranscodeMatch>) -> Dirs {
 	fs::create_dir(&to).unwrap();
 	Dirs {
 		_tmp: tmp,
-		config: Config {
+		ctx: Context {
 			config_path: root.join("audio-conv.yaml"),
-			log_path: root.join("audio-conv.log"),
 			from,
 			to,
 			matches,
 			jobs: None,
 			delete: None,
+			log: Log::new(root.join("audio-conv.log")),
 		},
 	}
 }
@@ -46,23 +46,23 @@ fn touch(path: &Path) {
 	File::create(path).unwrap();
 }
 
-fn orphans(config: &Config, mode: DeleteMode) -> Vec<PathBuf> {
-	find_orphans(config, mode)
+fn orphans(ctx: &Context, mode: DeleteMode) -> Vec<PathBuf> {
+	find_orphans(ctx, mode)
 		.unwrap()
 		.into_iter()
-		.map(|path| path.strip_prefix(&config.to).unwrap().to_path_buf())
+		.map(|path| path.strip_prefix(&ctx.to).unwrap().to_path_buf())
 		.collect()
 }
 
 /// `from/a.flac` with its target and some other files in `to`.
 fn library(matches: Vec<TranscodeMatch>) -> Dirs {
 	let d = dirs(matches);
-	touch(&d.config.from.join("album/a.flac"));
-	touch(&d.config.to.join("album/a.opus"));
-	touch(&d.config.to.join("album/b.opus"));
-	touch(&d.config.to.join("album/c.tmp"));
-	touch(&d.config.to.join("album/cover.jpg"));
-	touch(&d.config.to.join("album/d.mp3"));
+	touch(&d.ctx.from.join("album/a.flac"));
+	touch(&d.ctx.to.join("album/a.opus"));
+	touch(&d.ctx.to.join("album/b.opus"));
+	touch(&d.ctx.to.join("album/c.tmp"));
+	touch(&d.ctx.to.join("album/cover.jpg"));
+	touch(&d.ctx.to.join("album/d.mp3"));
 	d
 }
 
@@ -71,7 +71,7 @@ fn converted_only_finds_files_audio_conv_creates() {
 	let d = library(compile_matches(&[]).unwrap());
 
 	assert_eq!(
-		orphans(&d.config, DeleteMode::Converted),
+		orphans(&d.ctx, DeleteMode::Converted),
 		[PathBuf::from("album/b.opus"), PathBuf::from("album/c.tmp")]
 	);
 }
@@ -81,7 +81,7 @@ fn all_finds_every_file_without_source() {
 	let d = library(compile_matches(&[]).unwrap());
 
 	assert_eq!(
-		orphans(&d.config, DeleteMode::All),
+		orphans(&d.ctx, DeleteMode::All),
 		[
 			PathBuf::from("album/b.opus"),
 			PathBuf::from("album/c.tmp"),
@@ -98,7 +98,7 @@ fn converted_includes_paths_a_copy_match_would_create() {
 	));
 
 	assert_eq!(
-		orphans(&d.config, DeleteMode::Converted),
+		orphans(&d.ctx, DeleteMode::Converted),
 		[
 			PathBuf::from("album/b.opus"),
 			PathBuf::from("album/c.tmp"),
@@ -110,32 +110,32 @@ fn converted_includes_paths_a_copy_match_would_create() {
 #[test]
 fn keeps_config_and_log_file() {
 	let mut d = library(compile_matches(&[]).unwrap());
-	d.config.config_path = d.config.to.join("audio-conv.yaml");
-	d.config.log_path = d.config.to.join("audio-conv.log");
-	touch(&d.config.config_path);
-	touch(&d.config.log_path);
+	d.ctx.config_path = d.ctx.to.join("audio-conv.yaml");
+	d.ctx.log = Log::new(d.ctx.to.join("audio-conv.log"));
+	touch(&d.ctx.config_path);
+	touch(d.ctx.log.path());
 
-	let orphans = find_orphans(&d.config, DeleteMode::All).unwrap();
+	let orphans = find_orphans(&d.ctx, DeleteMode::All).unwrap();
 
-	assert!(!orphans.contains(&d.config.config_path));
-	assert!(!orphans.contains(&d.config.log_path));
+	assert!(!orphans.contains(&d.ctx.config_path));
+	assert!(!orphans.contains(&d.ctx.log.path().to_path_buf()));
 }
 
 #[test]
 fn fails_without_matching_source_files() {
 	let d = dirs(compile_matches(&[]).unwrap());
-	touch(&d.config.from.join("cover.jpg"));
-	touch(&d.config.to.join("a.opus"));
+	touch(&d.ctx.from.join("cover.jpg"));
+	touch(&d.ctx.to.join("a.opus"));
 
-	assert!(find_orphans(&d.config, DeleteMode::All).is_err());
+	assert!(find_orphans(&d.ctx, DeleteMode::All).is_err());
 }
 
 #[test]
 fn fails_if_from_and_to_overlap() {
 	let mut d = library(compile_matches(&[]).unwrap());
-	d.config.to = d.config.from.join("album");
+	d.ctx.to = d.ctx.from.join("album");
 
-	assert!(find_orphans(&d.config, DeleteMode::All).is_err());
+	assert!(find_orphans(&d.ctx, DeleteMode::All).is_err());
 }
 
 #[test]
@@ -143,12 +143,12 @@ fn fails_if_from_is_not_fully_readable() {
 	use ::std::os::unix::fs::PermissionsExt;
 
 	let d = library(compile_matches(&[]).unwrap());
-	let unreadable = d.config.from.join("unreadable");
+	let unreadable = d.ctx.from.join("unreadable");
 	fs::create_dir(&unreadable).unwrap();
 	fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000)).unwrap();
 
 	let readable = fs::read_dir(&unreadable).is_ok();
-	let res = find_orphans(&d.config, DeleteMode::All);
+	let res = find_orphans(&d.ctx, DeleteMode::All);
 	fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o755)).unwrap();
 
 	// root can read it anyway
@@ -164,13 +164,13 @@ fn delete(mode: DeleteMode, force: bool) -> Option<Delete> {
 #[test]
 fn run_without_force_only_logs() {
 	let mut d = library(compile_matches(&[]).unwrap());
-	d.config.delete = delete(DeleteMode::Converted, false);
-	let ctx = Context::new(d.config);
+	d.ctx.delete = delete(DeleteMode::Converted, false);
+	let ctx = d.ctx;
 
 	let deleted = run(&ctx).unwrap().unwrap();
 
 	assert_eq!((deleted.files, deleted.failed), (2, 0));
-	assert!(ctx.config.to.join("album/b.opus").exists());
+	assert!(ctx.to.join("album/b.opus").exists());
 	let log = fs::read_to_string(ctx.log.path()).unwrap();
 	assert!(log.contains("Would delete") && log.contains("b.opus") && log.contains("c.tmp"));
 }
@@ -178,14 +178,14 @@ fn run_without_force_only_logs() {
 #[test]
 fn run_with_force_deletes_and_logs() {
 	let mut d = library(compile_matches(&[]).unwrap());
-	d.config.delete = delete(DeleteMode::Converted, true);
-	let ctx = Context::new(d.config);
+	d.ctx.delete = delete(DeleteMode::Converted, true);
+	let ctx = d.ctx;
 
 	let deleted = run(&ctx).unwrap().unwrap();
 
 	assert_eq!((deleted.files, deleted.failed), (2, 0));
-	assert!(!ctx.config.to.join("album/b.opus").exists());
-	assert!(ctx.config.to.join("album/a.opus").exists());
+	assert!(!ctx.to.join("album/b.opus").exists());
+	assert!(ctx.to.join("album/a.opus").exists());
 	let log = fs::read_to_string(ctx.log.path()).unwrap();
 	assert!(log.contains("Deleted") && log.contains("b.opus") && log.contains("c.tmp"));
 }
@@ -193,18 +193,18 @@ fn run_with_force_deletes_and_logs() {
 #[test]
 fn run_deletes_nothing_if_the_log_file_cant_be_opened() {
 	let mut d = library(compile_matches(&[]).unwrap());
-	d.config.delete = delete(DeleteMode::Converted, true);
-	d.config.log_path = d.config.from.join("missing/audio-conv.log");
-	let ctx = Context::new(d.config);
+	d.ctx.delete = delete(DeleteMode::Converted, true);
+	d.ctx.log = Log::new(d.ctx.from.join("missing/audio-conv.log"));
+	let ctx = d.ctx;
 
 	assert!(run(&ctx).is_err());
-	assert!(ctx.config.to.join("album/b.opus").exists());
+	assert!(ctx.to.join("album/b.opus").exists());
 }
 
 #[test]
 fn run_without_delete_does_nothing() {
 	let d = library(compile_matches(&[]).unwrap());
-	let ctx = Context::new(d.config);
+	let ctx = d.ctx;
 
 	assert!(run(&ctx).unwrap().is_none());
 	assert!(!ctx.log.path().exists());
@@ -213,7 +213,7 @@ fn run_without_delete_does_nothing() {
 #[test]
 fn remove_deletes_emptied_dirs_up_to_to() {
 	let d = dirs(compile_matches(&[]).unwrap());
-	let to = &d.config.to;
+	let to = &d.ctx.to;
 	touch(&to.join("artist/album/a.opus"));
 	touch(&to.join("artist/b.opus"));
 

@@ -1,6 +1,6 @@
 //! Needs GStreamer with the plugins for all codecs installed.
 
-use ::audio_conv::{config::Transcode, transcode::dest_elements};
+use ::audio_conv::{context::Transcode, transcode::dest_elements};
 use ::gstreamer::{ClockTime, Element, MessageType, prelude::*};
 
 fn transcode(yaml: &str) -> Transcode {

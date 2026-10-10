@@ -1,4 +1,4 @@
-use ::audio_conv::config::json_schema;
+use ::audio_conv::context::config_file::json_schema;
 use ::std::{env, fs, path::Path};
 
 const SCHEMA_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/audio-conv.schema.json");

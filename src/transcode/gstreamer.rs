@@ -1,6 +1,6 @@
 use super::error::{GBoxErrorWrapper, GErrorMessage};
 use crate::{
-	config::{self, AudioExtension, Transcode},
+	context::{self, AudioExtension, Transcode},
 	ui,
 };
 use ::anyhow::{Context, Error, Result};
@@ -87,8 +87,8 @@ pub fn dest_elements(transcode: &Transcode) -> Result<Vec<Element>> {
 			encoder.set_property_from_str(
 				"bitrate-type",
 				match bitrate_type {
-					config::BitrateType::Vbr => "vbr",
-					config::BitrateType::Cbr => "cbr",
+					context::BitrateType::Vbr => "vbr",
+					context::BitrateType::Cbr => "cbr",
 				},
 			);
 
@@ -120,8 +120,8 @@ pub fn dest_elements(transcode: &Transcode) -> Result<Vec<Element>> {
 					(
 						"cbr",
 						match bitrate_type {
-							config::BitrateType::Vbr => &false,
-							config::BitrateType::Cbr => &true,
+							context::BitrateType::Vbr => &false,
+							context::BitrateType::Cbr => &true,
 						},
 					),
 				],

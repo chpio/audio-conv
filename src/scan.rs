@@ -1,5 +1,5 @@
-use crate::config::{Config, Transcode, TranscodeMatch};
-use ::anyhow::{Context, Error, Result};
+use crate::context::{Context, Transcode, TranscodeMatch};
+use ::anyhow::{Context as _, Error, Result};
 use ::std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -18,23 +18,23 @@ impl ConversionArgs {
 	}
 }
 
-pub fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<ConversionArgs>> + '_ {
-	walkdir::WalkDir::new(&config.from)
+pub fn get_conversion_args(ctx: &Context) -> impl Iterator<Item = Result<ConversionArgs>> + '_ {
+	walkdir::WalkDir::new(&ctx.from)
 		.into_iter()
 		.filter_map(|e| e.ok())
 		.filter(|e| e.file_type().is_file())
 		.map(move |e| -> Result<Option<ConversionArgs>> {
-			let transcode = if let Some(transcode) = find_transcode(&config.matches, e.path()) {
+			let transcode = if let Some(transcode) = find_transcode(&ctx.matches, e.path()) {
 				transcode.clone()
 			} else {
 				return Ok(None);
 			};
 
-			let rel_path = e.path().strip_prefix(&config.from).with_context(|| {
+			let rel_path = e.path().strip_prefix(&ctx.from).with_context(|| {
 				format!(
 					"Unable to get relative path for {} from {}",
 					e.path().display(),
-					config.from.display()
+					ctx.from.display()
 				)
 			})?;
 
@@ -42,7 +42,7 @@ pub fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<Conve
 				rel_from_path: rel_path.to_path_buf(),
 				transcode,
 			};
-			let to = args.to_path(&config.to);
+			let to = args.to_path(&ctx.to);
 
 			let is_newer = {
 				let from_mtime = e

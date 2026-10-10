@@ -1,4 +1,3 @@
-pub mod config;
 pub mod context;
 pub mod delete;
 pub mod log;
