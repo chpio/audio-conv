@@ -1,289 +1,289 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "audio-conv config",
-  "description": "audio-conv config file, `audio-conv.yaml` in the current directory by default.",
-  "type": "object",
-  "properties": {
-    "from": {
-      "description": "Directory with the source files, relative to the config file. Overridden by `--from`.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "jobs": {
-      "description": "Number of files converted at once, defaults to the number of logical cores. Overridden by\n`--jobs`.",
-      "type": [
-        "integer",
-        "null"
-      ],
-      "format": "uint",
-      "minimum": 0
-    },
-    "matches": {
-      "description": "Rules which files are converted and how, the first matching rule wins. Without rules,\n`.flac` and `.wav` files are transcoded to Opus with 160 kbit/s.",
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/TranscodeMatchFile"
-      }
-    },
-    "to": {
-      "description": "Directory the converted files are written to, relative to the config file. Overridden by\n`--to`.",
-      "type": [
-        "string",
-        "null"
-      ]
-    }
-  },
-  "additionalProperties": false,
-  "definitions": {
-    "AudioExtension": {
-      "description": "Container for `copy_audio`, the audio codec of the source has to be supported by it.",
-      "oneOf": [
-        {
-          "description": "MP4 audio, e.g. for AAC or ALAC",
-          "type": "string",
-          "const": "m4a"
-        },
-        {
-          "description": "Matroska audio, supports nearly every audio codec",
-          "type": "string",
-          "const": "mka"
-        },
-        {
-          "description": "Ogg, e.g. for Vorbis, Opus or FLAC",
-          "type": "string",
-          "const": "ogg"
-        },
-        {
-          "description": "Ogg, for Opus",
-          "type": "string",
-          "const": "opus"
-        },
-        {
-          "description": "WebM, for Vorbis or Opus",
-          "type": "string",
-          "const": "webm"
-        },
-        {
-          "description": "MP3",
-          "type": "string",
-          "const": "mp3"
-        },
-        {
-          "description": "FLAC",
-          "type": "string",
-          "const": "flac"
-        }
-      ]
-    },
-    "BitrateType": {
-      "oneOf": [
-        {
-          "description": "Constant bitrate",
-          "type": "string",
-          "const": "cbr"
-        },
-        {
-          "description": "Variable bitrate",
-          "type": "string",
-          "const": "vbr"
-        }
-      ]
-    },
-    "Transcode": {
-      "description": "What the matched files are converted to.",
-      "oneOf": [
-        {
-          "description": "Transcodes to Opus in an Ogg container (`.opus`).",
-          "type": "object",
-          "properties": {
-            "bitrate": {
-              "description": "Bitrate in kbit/s.",
-              "type": "integer",
-              "format": "uint16",
-              "default": 160,
-              "maximum": 650,
-              "minimum": 4
-            },
-            "bitrate_type": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/BitrateType"
-                }
-              ],
-              "default": "vbr"
-            },
-            "codec": {
-              "type": "string",
-              "const": "opus"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "codec"
-          ]
-        },
-        {
-          "description": "Transcodes to FLAC (`.flac`).",
-          "type": "object",
-          "properties": {
-            "codec": {
-              "type": "string",
-              "const": "flac"
-            },
-            "compression": {
-              "description": "Effort spent for the compression, 0 (fastest) to 9 (highest compression).",
-              "type": "integer",
-              "format": "uint8",
-              "default": 5,
-              "maximum": 9,
-              "minimum": 0
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "codec"
-          ]
-        },
-        {
-          "description": "Transcodes to MP3 (`.mp3`).",
-          "type": "object",
-          "properties": {
-            "bitrate": {
-              "description": "Bitrate in kbit/s. `vbr` (average bitrate) takes any value, `cbr` one of 8, 16, 24, 32,\n40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256 or 320.",
-              "type": "integer",
-              "format": "uint16",
-              "default": 256,
-              "maximum": 320,
-              "minimum": 8
-            },
-            "bitrate_type": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/BitrateType"
-                }
-              ],
-              "default": "vbr"
-            },
-            "codec": {
-              "type": "string",
-              "const": "mp3"
-            }
-          },
-          "additionalProperties": false,
-          "if": {
-            "properties": {
-              "bitrate_type": {
-                "const": "cbr"
-              }
-            },
-            "required": [
-              "bitrate_type"
-            ]
-          },
-          "required": [
-            "codec"
-          ],
-          "then": {
-            "properties": {
-              "bitrate": {
-                "enum": [
-                  8,
-                  16,
-                  24,
-                  32,
-                  40,
-                  48,
-                  56,
-                  64,
-                  80,
-                  96,
-                  112,
-                  128,
-                  160,
-                  192,
-                  224,
-                  256,
-                  320
-                ]
-              }
-            }
-          }
-        },
-        {
-          "description": "Copies the file without transcoding it, the extension is kept.",
-          "type": "object",
-          "properties": {
-            "codec": {
-              "type": "string",
-              "const": "copy"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "codec"
-          ]
-        },
-        {
-          "description": "Copies the first audio stream without transcoding it, e.g. the audio of a video file.",
-          "type": "object",
-          "properties": {
-            "codec": {
-              "type": "string",
-              "const": "copy_audio"
-            },
-            "extension": {
-              "description": "Extension and container of the target file, the audio codec of the source has to be\nsupported by it.",
-              "allOf": [
-                {
-                  "$ref": "#/definitions/AudioExtension"
-                }
-              ]
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "codec",
-            "extension"
-          ]
-        }
-      ]
-    },
-    "TranscodeMatchFile": {
-      "description": "A rule matching files by `glob`, `regex` and/or `extensions` (case insensitive, a file has\nto match any of them). Without any of them, `.flac` and `.wav` files are matched.",
-      "type": "object",
-      "properties": {
-        "extensions": {
-          "description": "File extensions without the leading dot, e.g. `flac`.",
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "string"
-          }
-        },
-        "glob": {
-          "description": "Glob matched against the absolute path of the file, e.g. `**/*.flac`.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "regex": {
-          "description": "Regular expression matched against the absolute path of the file, e.g. `\\.flac$`.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "to": {
-          "$ref": "#/definitions/Transcode"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "to"
-      ]
-    }
-  }
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "audio-conv config",
+	"description": "audio-conv config file, `audio-conv.yaml` in the current directory by default.",
+	"type": "object",
+	"properties": {
+		"from": {
+			"description": "Directory with the source files, relative to the config file. Overridden by `--from`.",
+			"type": [
+				"string",
+				"null"
+			]
+		},
+		"jobs": {
+			"description": "Number of files converted at once, defaults to the number of logical cores. Overridden by\n`--jobs`.",
+			"type": [
+				"integer",
+				"null"
+			],
+			"format": "uint",
+			"minimum": 0
+		},
+		"matches": {
+			"description": "Rules which files are converted and how, the first matching rule wins. Without rules,\n`.flac` and `.wav` files are transcoded to Opus with 160 kbit/s.",
+			"type": "array",
+			"items": {
+				"$ref": "#/definitions/TranscodeMatchFile"
+			}
+		},
+		"to": {
+			"description": "Directory the converted files are written to, relative to the config file. Overridden by\n`--to`.",
+			"type": [
+				"string",
+				"null"
+			]
+		}
+	},
+	"additionalProperties": false,
+	"definitions": {
+		"AudioExtension": {
+			"description": "Container for `copy_audio`, the audio codec of the source has to be supported by it.",
+			"oneOf": [
+				{
+					"description": "MP4 audio, e.g. for AAC or ALAC",
+					"type": "string",
+					"const": "m4a"
+				},
+				{
+					"description": "Matroska audio, supports nearly every audio codec",
+					"type": "string",
+					"const": "mka"
+				},
+				{
+					"description": "Ogg, e.g. for Vorbis, Opus or FLAC",
+					"type": "string",
+					"const": "ogg"
+				},
+				{
+					"description": "Ogg, for Opus",
+					"type": "string",
+					"const": "opus"
+				},
+				{
+					"description": "WebM, for Vorbis or Opus",
+					"type": "string",
+					"const": "webm"
+				},
+				{
+					"description": "MP3",
+					"type": "string",
+					"const": "mp3"
+				},
+				{
+					"description": "FLAC",
+					"type": "string",
+					"const": "flac"
+				}
+			]
+		},
+		"BitrateType": {
+			"oneOf": [
+				{
+					"description": "Constant bitrate",
+					"type": "string",
+					"const": "cbr"
+				},
+				{
+					"description": "Variable bitrate",
+					"type": "string",
+					"const": "vbr"
+				}
+			]
+		},
+		"Transcode": {
+			"description": "What the matched files are converted to.",
+			"oneOf": [
+				{
+					"description": "Transcodes to Opus in an Ogg container (`.opus`).",
+					"type": "object",
+					"properties": {
+						"bitrate": {
+							"description": "Bitrate in kbit/s.",
+							"type": "integer",
+							"format": "uint16",
+							"default": 160,
+							"maximum": 650,
+							"minimum": 4
+						},
+						"bitrate_type": {
+							"allOf": [
+								{
+									"$ref": "#/definitions/BitrateType"
+								}
+							],
+							"default": "vbr"
+						},
+						"codec": {
+							"type": "string",
+							"const": "opus"
+						}
+					},
+					"additionalProperties": false,
+					"required": [
+						"codec"
+					]
+				},
+				{
+					"description": "Transcodes to FLAC (`.flac`).",
+					"type": "object",
+					"properties": {
+						"codec": {
+							"type": "string",
+							"const": "flac"
+						},
+						"compression": {
+							"description": "Effort spent for the compression, 0 (fastest) to 9 (highest compression).",
+							"type": "integer",
+							"format": "uint8",
+							"default": 5,
+							"maximum": 9,
+							"minimum": 0
+						}
+					},
+					"additionalProperties": false,
+					"required": [
+						"codec"
+					]
+				},
+				{
+					"description": "Transcodes to MP3 (`.mp3`).",
+					"type": "object",
+					"properties": {
+						"bitrate": {
+							"description": "Bitrate in kbit/s. `vbr` (average bitrate) takes any value, `cbr` one of 8, 16, 24, 32,\n40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256 or 320.",
+							"type": "integer",
+							"format": "uint16",
+							"default": 256,
+							"maximum": 320,
+							"minimum": 8
+						},
+						"bitrate_type": {
+							"allOf": [
+								{
+									"$ref": "#/definitions/BitrateType"
+								}
+							],
+							"default": "vbr"
+						},
+						"codec": {
+							"type": "string",
+							"const": "mp3"
+						}
+					},
+					"additionalProperties": false,
+					"if": {
+						"properties": {
+							"bitrate_type": {
+								"const": "cbr"
+							}
+						},
+						"required": [
+							"bitrate_type"
+						]
+					},
+					"required": [
+						"codec"
+					],
+					"then": {
+						"properties": {
+							"bitrate": {
+								"enum": [
+									8,
+									16,
+									24,
+									32,
+									40,
+									48,
+									56,
+									64,
+									80,
+									96,
+									112,
+									128,
+									160,
+									192,
+									224,
+									256,
+									320
+								]
+							}
+						}
+					}
+				},
+				{
+					"description": "Copies the file without transcoding it, the extension is kept.",
+					"type": "object",
+					"properties": {
+						"codec": {
+							"type": "string",
+							"const": "copy"
+						}
+					},
+					"additionalProperties": false,
+					"required": [
+						"codec"
+					]
+				},
+				{
+					"description": "Copies the first audio stream without transcoding it, e.g. the audio of a video file.",
+					"type": "object",
+					"properties": {
+						"codec": {
+							"type": "string",
+							"const": "copy_audio"
+						},
+						"extension": {
+							"description": "Extension and container of the target file, the audio codec of the source has to be\nsupported by it.",
+							"allOf": [
+								{
+									"$ref": "#/definitions/AudioExtension"
+								}
+							]
+						}
+					},
+					"additionalProperties": false,
+					"required": [
+						"codec",
+						"extension"
+					]
+				}
+			]
+		},
+		"TranscodeMatchFile": {
+			"description": "A rule matching files by `glob`, `regex` and/or `extensions` (case insensitive, a file has\nto match any of them). Without any of them, `.flac` and `.wav` files are matched.",
+			"type": "object",
+			"properties": {
+				"extensions": {
+					"description": "File extensions without the leading dot, e.g. `flac`.",
+					"type": "array",
+					"default": [],
+					"items": {
+						"type": "string"
+					}
+				},
+				"glob": {
+					"description": "Glob matched against the absolute path of the file, e.g. `**/*.flac`.",
+					"type": [
+						"string",
+						"null"
+					]
+				},
+				"regex": {
+					"description": "Regular expression matched against the absolute path of the file, e.g. `\\.flac$`.",
+					"type": [
+						"string",
+						"null"
+					]
+				},
+				"to": {
+					"$ref": "#/definitions/Transcode"
+				}
+			},
+			"additionalProperties": false,
+			"required": [
+				"to"
+			]
+		}
+	}
 }

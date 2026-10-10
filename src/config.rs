@@ -221,9 +221,14 @@ pub fn json_schema() -> String {
 	let schema = ::schemars::generate::SchemaSettings::draft07()
 		.into_generator()
 		.into_root_schema_for::<ConfigFile>();
-	let mut json = serde_json::to_string_pretty(&schema).expect("Failed serializing the schema");
-	json.push('\n');
-	json
+	let mut json = Vec::new();
+	let formatter = ::serde_json::ser::PrettyFormatter::with_indent(b"\t");
+	let mut serializer = ::serde_json::Serializer::with_formatter(&mut json, formatter);
+	schema
+		.serialize(&mut serializer)
+		.expect("Failed serializing the schema");
+	json.push(b'\n');
+	String::from_utf8(json).expect("Serialized schema is not valid UTF-8")
 }
 
 pub fn config() -> Result<Config> {
