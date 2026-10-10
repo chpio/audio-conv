@@ -16,7 +16,7 @@ UPDATE_SCHEMA=1 cargo test --test schema   # regenerate audio-conv.schema.json a
 cargo fmt                  # hard tabs (.rustfmt.toml)
 cargo run -- init          # writes example.audio-conv.yaml as ./audio-conv.yaml
 cargo run -- -f <from> -t <to> [-j N] [-c config.yaml]
-cargo outdated -R          # find outdated direct deps (cargo info/search don't work: crates-io is mirrored via kellnr)
+cargo outdated -R          # find outdated direct deps
 ```
 
 Tests live in `tests/` (integration tests against the library, no inline `#[cfg(test)]` modules) and cover config/match compilation, the directory scan and the encoder/muxer elements per codec (`tests/gstreamer.rs`, needs the GStreamer plugins of all codecs installed); the full transcode of files and the UI are untested.
