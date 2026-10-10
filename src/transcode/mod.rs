@@ -17,7 +17,7 @@ pub async fn transcode(
 	queue: &ui::MsgQueue,
 ) -> Result<()> {
 	let from_path = config.from.join(&args.rel_from_path);
-	let mut to_path = config.to.join(&args.rel_from_path);
+	let to_path = args.to_path(&config.to);
 
 	fs::create_dir_all(
 		to_path
@@ -42,8 +42,6 @@ pub async fn transcode(
 				})?;
 			}
 			_ => {
-				to_path.set_extension(args.transcode.extension());
-
 				gstreamer::transcode_gstreamer(
 					&from_path,
 					&to_path_tmp,

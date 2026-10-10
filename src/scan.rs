@@ -8,6 +8,16 @@ pub struct ConversionArgs {
 	pub transcode: Transcode,
 }
 
+impl ConversionArgs {
+	pub fn to_path(&self, to_dir: &Path) -> PathBuf {
+		let mut to_path = to_dir.join(&self.rel_from_path);
+		if let Some(extension) = self.transcode.extension() {
+			to_path.set_extension(extension);
+		}
+		to_path
+	}
+}
+
 pub fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<ConversionArgs>> + '_ {
 	walkdir::WalkDir::new(&config.from)
 		.into_iter()
@@ -28,8 +38,11 @@ pub fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<Conve
 				)
 			})?;
 
-			let mut to = config.to.join(rel_path);
-			to.set_extension(transcode.extension());
+			let args = ConversionArgs {
+				rel_from_path: rel_path.to_path_buf(),
+				transcode,
+			};
+			let to = args.to_path(&config.to);
 
 			let is_newer = {
 				let from_mtime = e
@@ -54,14 +67,7 @@ pub fn get_conversion_args(config: &Config) -> impl Iterator<Item = Result<Conve
 				}
 			};
 
-			if is_newer {
-				Ok(Some(ConversionArgs {
-					rel_from_path: rel_path.to_path_buf(),
-					transcode,
-				}))
-			} else {
-				Ok(None)
-			}
+			Ok(is_newer.then_some(args))
 		})
 		.filter_map(|e| e.transpose())
 }

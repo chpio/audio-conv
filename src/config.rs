@@ -54,12 +54,13 @@ pub enum Transcode {
 }
 
 impl Transcode {
-	pub fn extension(&self) -> &'static str {
+	/// Extension of the target file, `None` keeps the extension of the source file.
+	pub fn extension(&self) -> Option<&'static str> {
 		match self {
-			Transcode::Opus { .. } => "opus",
-			Transcode::Flac { .. } => "flac",
-			Transcode::Mp3 { .. } => "mp3",
-			Transcode::Copy => "",
+			Transcode::Opus { .. } => Some("opus"),
+			Transcode::Flac { .. } => Some("flac"),
+			Transcode::Mp3 { .. } => Some("mp3"),
+			Transcode::Copy => None,
 		}
 	}
 }

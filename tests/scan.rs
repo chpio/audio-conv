@@ -126,3 +126,12 @@ fn target_extension_depends_on_codec() {
 
 	assert!(scan(&d.config).is_empty());
 }
+
+#[test]
+fn copy_keeps_extension() {
+	let d = dirs(compile("[{extensions: [jpg], to: {codec: copy}}]"));
+	touch(&d.config.from.join("cover.jpg"), hours_ago(2));
+	touch(&d.config.to.join("cover.jpg"), hours_ago(1));
+
+	assert!(scan(&d.config).is_empty());
+}
