@@ -1,0 +1,26 @@
+name: build-ci-image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .gitea/ci.Dockerfile
+      - .gitea/workflows/build-ci-image.yaml
+  # picks up new rust and debian releases
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ vars.DOCKER_REGISTRY }}/${{ github.repository_owner }}/audio-conv-ci:latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: login
+        run: echo "${{ secrets.DOCKER_REGISTRY_TOKEN }}" | docker login "${{ vars.DOCKER_REGISTRY }}" -u "${{ github.repository_owner }}" --password-stdin
+      - name: build
+        run: docker build --pull -t "$IMAGE" - < .gitea/ci.Dockerfile
+      - name: push
+        run: docker push "$IMAGE"
