@@ -1,10 +1,4 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
-	"extends": [
-		"local>git/renovate"
-	],
-	"minimumReleaseAge": "2 days",
-	"internalChecksFilter": "none",
-	"automerge": true,
-	"platformAutomerge": false
+	"extends": ["local>git/renovate", "local>git/renovate:automerge"]
 }
