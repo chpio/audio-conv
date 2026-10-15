@@ -14,13 +14,21 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # kaniko builds without a docker daemon, which the kubernetes runner doesn't have. Its image
+    # has no node for actions/checkout, kaniko clones the repo itself (git context).
+    container: martizih/kaniko:v1.28.6-debug
     env:
-      IMAGE: ${{ vars.DOCKER_REGISTRY }}/${{ github.repository_owner }}/audio-conv-ci:latest
+      REGISTRY: ${{ vars.DOCKER_REGISTRY }}
+      REGISTRY_USER: ${{ github.repository_owner }}
+      REGISTRY_TOKEN: ${{ secrets.DOCKER_REGISTRY_TOKEN }}
     steps:
-      - uses: actions/checkout@v7
       - name: login
-        run: echo "${{ secrets.DOCKER_REGISTRY_TOKEN }}" | docker login "${{ vars.DOCKER_REGISTRY }}" -u "${{ github.repository_owner }}" --password-stdin
-      - name: build
-        run: docker build --pull -t "$IMAGE" - < .gitea/ci.Dockerfile
-      - name: push
-        run: docker push "$IMAGE"
+        run: |
+          AUTH="$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_TOKEN" | base64 | tr -d '\n')"
+          printf '{"auths":{"%s":{"auth":"%s"}}}' "$REGISTRY" "$AUTH" > /kaniko/.docker/config.json
+      - name: build and push
+        run: |
+          /kaniko/executor \
+            --context "git://${GITHUB_SERVER_URL#https://}/$GITHUB_REPOSITORY.git#$GITHUB_REF#$GITHUB_SHA" \
+            --dockerfile .gitea/ci.Dockerfile \
+            --destination "$REGISTRY/$REGISTRY_USER/audio-conv-ci:latest"
