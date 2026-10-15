@@ -22,7 +22,7 @@ jobs:
             gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-ugly
           rustup component add clippy rustfmt
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/cache@v6
         with:
           path: |
