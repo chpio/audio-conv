@@ -4,5 +4,7 @@
 		"local>git/renovate"
 	],
 	"minimumReleaseAge": "2 days",
-	"automerge": true
+	"internalChecksFilter": "none",
+	"automerge": true,
+	"platformAutomerge": false
 }
