@@ -3,7 +3,8 @@
 	"extends": [
 		"local>git/renovate",
 		"local>git/renovate:automerge",
-		"local>git/renovate:group-non-major"
+		"local>git/renovate:group-non-major",
+		"schedule:monthly"
 	],
 	"lockFileMaintenance": {
 		"enabled": true
