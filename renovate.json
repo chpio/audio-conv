@@ -1,4 +1,11 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
-	"extends": ["local>git/renovate", "local>git/renovate:automerge"]
+	"extends": [
+		"local>git/renovate",
+		"local>git/renovate:automerge",
+		"local>git/renovate:group-non-major"
+	],
+	"lockFileMaintenance": {
+		"enabled": true
+	}
 }
