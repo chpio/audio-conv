@@ -9,10 +9,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     # built in the git/images repo
+    # The image runs rustc through sccache. Its storage, SCCACHE_REDIS_ENDPOINT, comes from the
+    # runner for every job; don't set it here, an empty value would override it.
     container: ${{ vars.DOCKER_REGISTRY }}/git/rust:latest
-    env:
-      # the image runs rustc through sccache, this is its storage
-      SCCACHE_REDIS_ENDPOINT: ${{ secrets.SCCACHE_REDIS_ENDPOINT }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/cache@v6
