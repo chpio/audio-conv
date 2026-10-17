@@ -12,7 +12,7 @@ jobs:
     # The image runs rustc through sccache. Its storage (SCCACHE_REDIS_ENDPOINT and
     # SCCACHE_REDIS_PASSWORD) comes from the runner for every job; don't set it here, an empty
     # value would override it.
-    container: ${{ vars.DOCKER_REGISTRY }}/git/rust:latest
+    container: ${{ vars.DOCKER_REGISTRY }}/git/rust-gst:latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/cache@v6
