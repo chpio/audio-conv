@@ -8,8 +8,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # built from .gitea/ci.Dockerfile by build-ci-image.yaml
-    container: ${{ vars.DOCKER_REGISTRY }}/${{ github.repository_owner }}/audio-conv-ci:latest
+    # built in the git/images repo
+    container: ${{ vars.DOCKER_REGISTRY }}/git/rust:latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/cache@v6

@@ -36,7 +36,7 @@ Tests live in `tests/` (integration tests against the library, no inline `#[cfg(
 
 ## Conventions
 
-- CI (`.gitea/workflows/ci.yaml`) runs in an image built from `.gitea/ci.Dockerfile` by `build-ci-image.yaml` (on changes and weekly), so new system dependencies go into the Dockerfile.
+- CI (`.gitea/workflows/ci.yaml`) runs in the prebuilt image `rust`, built in the separate `git/images` repo (on changes and weekly), so new system dependencies go into its Dockerfile there.
 - Conventional commit prefixes (`chore:`, `docs:`, `build:` …). Dependency upgrades are committed as `chore: update deps`.
 - Releases: `chore: bump version (vX.Y.Z)` bumps the version in `Cargo.toml`/`Cargo.lock` and adds a `CHANGELOG.md` entry; the commit is tagged `vX.Y.Z`.
 - `use` statements for external crates (including `std`) start with `::` (e.g. `use ::anyhow::Result;`); `crate::`/`super::` paths stay as they are. rustfmt has no option for this, so keep it by hand.
