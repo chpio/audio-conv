@@ -3,15 +3,21 @@
 [workspace]
 # the library only exists for the tests under tests/, its API isn't public
 semver_check = false
-# only releases for changes users notice, the same commits that end up in the changelog
-release_commits = "^(feat|fix|chore: update deps)"
+# Only releases for changes users notice, the same commits that end up in the changelog: features,
+# fixes and dependency updates (`chore(deps): …`, as Renovate writes them, also by hand). Commits
+# that don't touch a file of the package (e.g. Renovate's action updates) are left out anyway.
+# Release-plz doesn't compare Cargo.lock with the released package, so a commit that only changes
+# it counts only after a commit that changes the package; if there's none, release-plz adds a
+# commit `chore: update Cargo.lock dependencies` (or `Cargo.toml`) on its own.
+release_commits = '^(feat|fix|chore\(deps\)|chore: update Cargo\.(toml|lock) dependencies)'
 pr_name = "chore: bump version (v{{ version }})"
 pr_branch_prefix = "release/"
 
 [changelog]
 header = "# Changelog\n"
 # The description of the conventional commit is the entry (`feat: add --foo` → `* add --foo`), in a
-# section per type, the empty ones are left out. Dependency updates get a single entry.
+# section per type, the empty ones are left out. Dependency updates get a single entry, the
+# commits release-plz sees are an incomplete list of them (see release_commits).
 body = """
 ## {{ version }}
 {%- set features = commits | filter(attribute="group", value="features") %}
@@ -42,6 +48,6 @@ sort_commits = "oldest"
 commit_parsers = [
 	{ message = "^feat", group = "features" },
 	{ message = "^fix", group = "fixes" },
-	{ message = "^chore: update deps", group = "deps" },
+	{ message = '^(chore\(deps\)|chore: update Cargo\.(toml|lock) dependencies)', group = "deps" },
 	{ message = ".*", skip = true },
 ]
