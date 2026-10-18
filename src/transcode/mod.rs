@@ -28,7 +28,7 @@ pub async fn transcode(
 	)
 	.await?;
 
-	// encode into a tmp file first, then rename to actuall file name, that way we're writing
+	// encode into a tmp file first, then rename to the actual file name, that way we're writing
 	// "whole" files to the intended file path, ignoring partial files in the mtime check
 	let to_path_tmp = to_path.with_extension("tmp");
 
