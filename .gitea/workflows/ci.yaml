@@ -85,14 +85,18 @@ jobs:
     # built in the git/images repo, meant to float like in the test job
     container: ${{ vars.DOCKER_REGISTRY }}/git/rust:latest # zizmor: ignore[unpinned-images]
     steps:
-      # release-plz pushes the PR branch with git through these credentials. Not the built-in
-      # token, the ci wouldn't run on the PR with it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
-          persist-credentials: true # zizmor: ignore[artipacked]
-      - run: release-plz release-pr --forge gitea --registry crates-io
+          persist-credentials: false
+      # Release-plz pushes the PR branch with git, from a copy of the repo in a temp dir, which
+      # doesn't get the credentials checkout persists (they're only included for the checkout's
+      # path). So git gets the token from the environment through a credential helper, it doesn't
+      # end up in a file. Not the built-in token, the ci wouldn't run on the PR with it.
+      - run: |
+          # shellcheck disable=SC2016 # expanded by the shell git runs the helper in
+          git config --global credential.helper '!f() { echo username=x-access-token; echo "password=$GIT_TOKEN"; }; f'
+          release-plz release-pr --forge gitea --registry crates-io
         env:
           GIT_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           # the release commit is made with git, which needs an identity
