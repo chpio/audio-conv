@@ -1,0 +1,46 @@
+# release-plz config (https://release-plz.dev/docs/config), run in CI by the release jobs
+
+[workspace]
+# the library only exists for the tests under tests/, its API isn't public
+semver_check = false
+# only releases for changes users notice, the same commits that end up in the changelog
+release_commits = "^(feat|fix|chore: update deps)"
+pr_name = "chore: bump version (v{{ version }})"
+
+[changelog]
+header = "# Changelog\n"
+# The description of the conventional commit is the entry (`feat: add --foo` → `* add --foo`), in a
+# section per type, the empty ones are left out. Dependency updates get a single entry.
+body = """
+## {{ version }}
+{%- set features = commits | filter(attribute="group", value="features") %}
+{%- set fixes = commits | filter(attribute="group", value="fixes") %}
+{%- if features | length > 0 %}
+
+### Features
+{% for commit in features %}
+* {{ commit.message }}
+{%- endfor %}
+{%- endif %}
+{%- if fixes | length > 0 %}
+
+### Fixes
+{% for commit in fixes %}
+* {{ commit.message }}
+{%- endfor %}
+{%- endif %}
+{%- if commits | filter(attribute="group", value="deps") | length > 0 %}
+
+### Dependencies
+
+* update dependencies
+{%- endif %}
+
+"""
+sort_commits = "oldest"
+commit_parsers = [
+	{ message = "^feat", group = "features" },
+	{ message = "^fix", group = "fixes" },
+	{ message = "^chore: update deps", group = "deps" },
+	{ message = ".*", skip = true },
+]

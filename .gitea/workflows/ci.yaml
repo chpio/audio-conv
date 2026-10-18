@@ -55,3 +55,48 @@ jobs:
       - run: cargo test --locked
       - run: sccache --show-stats
         if: always()
+
+  # Releases the version in Cargo.toml if it isn't on crates.io yet, i.e. after the release PR got
+  # merged: `cargo publish`, then the tag `vX.Y.Z` and the Gitea release (both through the API).
+  # Does nothing on the other pushes.
+  release:
+    needs: [check, test]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    # `cargo publish` builds the package, so it needs GStreamer
+    container: ${{ vars.DOCKER_REGISTRY }}/git/rust-gst:latest # zizmor: ignore[unpinned-images]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # the image replaces crates.io with the kellnr proxy, publishing to crates.io needs the
+      # registry named explicitly then
+      - run: release-plz release --forge gitea --registry crates-io
+        env:
+          GIT_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # Opens or updates the release PR with the version bump and the changelog entry, from the feat:
+  # and fix: commits since the last release. After the release job, so it sees the new release.
+  release-pr:
+    needs: [release]
+    runs-on: ubuntu-latest
+    # built in the git/images repo, meant to float like in the test job
+    container: ${{ vars.DOCKER_REGISTRY }}/git/rust:latest # zizmor: ignore[unpinned-images]
+    steps:
+      # release-plz pushes the PR branch with git through these credentials. Not the built-in
+      # token, the ci wouldn't run on the PR with it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          persist-credentials: true # zizmor: ignore[artipacked]
+      - run: release-plz release-pr --forge gitea --registry crates-io
+        env:
+          GIT_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          # the release commit is made with git, which needs an identity
+          GIT_AUTHOR_NAME: release-plz
+          GIT_AUTHOR_EMAIL: release-plz@noreply.invalid
+          GIT_COMMITTER_NAME: release-plz
+          GIT_COMMITTER_EMAIL: release-plz@noreply.invalid
