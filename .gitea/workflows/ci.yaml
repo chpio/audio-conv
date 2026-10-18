@@ -46,6 +46,12 @@ jobs:
         with:
           persist-credentials: false
       - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo doc --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+      # the msrv toolchain comes with the image, the version is read from Cargo.toml. Only the
+      # library and binary, the dev-dependencies may need a newer rust.
+      - run: cargo "+$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)" check --locked
       - run: cargo test --locked
       - run: sccache --show-stats
         if: always()
