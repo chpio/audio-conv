@@ -1,0 +1,5 @@
+# typos config (https://github.com/crate-ci/typos), run in CI by `typos`
+
+[default.extend-words]
+# the TUI crate
+ratatui = "ratatui"
