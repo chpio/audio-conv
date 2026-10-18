@@ -6,6 +6,7 @@ semver_check = false
 # only releases for changes users notice, the same commits that end up in the changelog
 release_commits = "^(feat|fix|chore: update deps)"
 pr_name = "chore: bump version (v{{ version }})"
+pr_branch_prefix = "release/"
 
 [changelog]
 header = "# Changelog\n"
