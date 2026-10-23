@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.1
+
+### Dependencies
+
+* update dependencies
+
 ## 1.6.0
 
 * log the directories in "from" that can't be read instead of skipping them silently
