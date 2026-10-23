@@ -70,10 +70,12 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      # the image replaces crates.io with the kellnr proxy, publishing to crates.io needs the
-      # registry named explicitly then
-      - run: release-plz release --forge gitea --registry crates-io
+      - run: release-plz release --forge gitea
         env:
+          # Past the kellnr proxy the image replaces crates.io with (in $CARGO_HOME/config.toml):
+          # after `cargo publish`, release-plz waits until the version shows up in the index, and
+          # kellnr caches the index files for about 30 minutes, as long as the default timeout.
+          CARGO_HOME: /tmp/cargo-home
           GIT_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
@@ -96,8 +98,11 @@ jobs:
       - run: |
           # shellcheck disable=SC2016 # expanded by the shell git runs the helper in
           git config --global credential.helper '!f() { echo username=x-access-token; echo "password=$GIT_TOKEN"; }; f'
-          release-plz release-pr --forge gitea --registry crates-io
+          release-plz release-pr --forge gitea
         env:
+          # past the kellnr proxy like in the release job, its cached index wouldn't have the
+          # version that job just released yet
+          CARGO_HOME: /tmp/cargo-home
           GIT_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           # the release commit is made with git, which needs an identity
           GIT_AUTHOR_NAME: release-plz
