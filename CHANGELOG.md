@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.2
+
+### Dependencies
+
+* update dependencies
+
 ## 1.6.1
 
 ### Dependencies
