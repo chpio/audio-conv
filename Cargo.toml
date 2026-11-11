@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.96"
 description = "Converts a directory of audio files to Opus, FLAC or MP3 via GStreamer, mirroring its structure"
 authors = ["Thomas Heck <t@b128.net>"]
-repository = "https://gitlab.com/chpio/audio-conv"
+repository = "https://github.com/chpio/audio-conv"
 license = "MIT OR Apache-2.0"
 categories = [
 	"command-line-utilities",
