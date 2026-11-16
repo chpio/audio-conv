@@ -1,0 +1,23 @@
+{
+    "sandbox": {
+        "enabled": true,
+        "autoAllowBashIfSandboxed": false,
+        "allowUnsandboxedCommands": false,
+        "excludedCommands": ["git commit-tree *"]
+    },
+    "permissions": {
+        "deny": [
+            "Read(~/.ssh/**)",
+            "Read(~/.gnupg/private-keys-v1.d/**)",
+            "Edit(./.claude/settings.json)",
+            "Write(./.claude/settings.json)",
+            "Edit(./.claude/settings.local.json)",
+            "Write(./.claude/settings.local.json)",
+            "Edit(~/.claude/settings.json)",
+            "Write(~/.claude/settings.json)",
+            "Edit(./.git/config)",
+            "Edit(./.git/hooks/**)",
+            "Edit(./.git/worktrees/*/config)"
+        ]
+    }
+}
