@@ -126,8 +126,13 @@ and validation with it. Configs written by `audio-conv init` already reference i
 configs add this line at the top:
 
 ```yaml
-# yaml-language-server: $schema=https://gitlab.com/chpio/audio-conv/-/raw/main/audio-conv.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/chpio/audio-conv/main/audio-conv.schema.json
 ```
+
+## Source code
+
+The repository lives on [GitHub](https://github.com/chpio/audio-conv), with a mirror on
+[GitLab](https://gitlab.com/chpio/audio-conv).
 
 ## License
 
