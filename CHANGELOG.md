@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.3
+
+### Fixes
+
+* point the schema URL and repository to GitHub
+
+### Dependencies
+
+* update dependencies
+
 ## 1.6.2
 
 ### Dependencies
